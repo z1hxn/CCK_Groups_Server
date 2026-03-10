@@ -21,6 +21,7 @@ npm run dev
 - `GET /api/competitions/:competitionId/rounds/day/:dayCount`
 - `POST /api/auth/token?code=...`
 - `POST /api/auth/logout`
+- `GET /api/v1/competition/:compIdx/player/:cckId`
 - `GET /api/groups/competitions/:competitionId/config`
 - `PUT /api/groups/competitions/:competitionId/config`
 - `GET /api/groups/competitions/:competitionId/assignments`

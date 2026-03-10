@@ -4,8 +4,14 @@ import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ENV_DIR = path.resolve(__dirname, '..');
+
+dotenv.config({ path: path.join(ENV_DIR, '.env') });
+dotenv.config({ path: path.join(ENV_DIR, '.env.local'), override: true });
 
 const PORT = Number(process.env.PORT || 8080);
 const RANKING_API_URL = (process.env.RANKING_API_URL || 'https://ranking.cubingclub.com/api/v1').replace(/\/$/, '');
@@ -23,10 +29,14 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '2mb' }));
 
 let pool;
+let dbBootstrapErrorMessage = null;
 
 const getDbPoolOrRespond = (res) => {
   if (pool) return pool;
-  res.status(503).json({ message: 'Database unavailable' });
+  res.status(503).json({
+    message: 'Database unavailable',
+    detail: dbBootstrapErrorMessage,
+  });
   return null;
 };
 
@@ -107,6 +117,31 @@ const toConfirmedRegistration = (dto) => ({
   needRfCard: Boolean(dto.needRfCard),
 });
 
+const PLAYER_GROUP_TABLES = [
+  { role: 'competition', tableName: 'group_competition' },
+  { role: 'judge', tableName: 'group_judge' },
+  { role: 'runner', tableName: 'group_runner' },
+  { role: 'scrambler', tableName: 'group_scrambler' },
+];
+
+const toPlayerGroupRow = (row, roundInfo) => ({
+  idx: row.idx,
+  roundIdx: row.round_idx,
+  cckId: row.cck_id,
+  group: row.group,
+  round: roundInfo
+    ? {
+        idx: roundInfo.idx,
+        compIdx: roundInfo.compIdx,
+        compName: roundInfo.compName,
+        cubeEventName: roundInfo.cubeEventName,
+        roundName: roundInfo.roundName,
+        eventStart: roundInfo.eventStart,
+        eventEnd: roundInfo.eventEnd,
+      }
+    : null,
+});
+
 const ensureSchema = async () => {
   const sqlPath = path.resolve(process.cwd(), 'src/db/schema.sql');
   const sql = fs.readFileSync(sqlPath, 'utf8');
@@ -173,6 +208,7 @@ app.get('/api/health', async (_req, res) => {
         port: MYSQL_PORT,
         database: MYSQL_DATABASE,
         status: 'unavailable',
+        detail: dbBootstrapErrorMessage,
       },
     });
   }
@@ -217,6 +253,64 @@ app.post('/api/auth/logout', async (req, res) => {
     body: JSON.stringify(req.body ?? {}),
   });
   return res.status(result.status).json(result.data ?? {});
+});
+
+app.get('/api/v1/competition/:compIdx/player/:cckId', async (req, res) => {
+  const db = getDbPoolOrRespond(res);
+  if (!db) return;
+
+  const compIdx = Number(req.params.compIdx);
+  const cckId = String(req.params.cckId || '').trim();
+
+  if (!Number.isFinite(compIdx)) {
+    return res.status(400).json({ message: 'Invalid compIdx' });
+  }
+  if (!cckId) {
+    return res.status(400).json({ message: 'Invalid cckId' });
+  }
+
+  const roleRows = {};
+  for (const { role, tableName } of PLAYER_GROUP_TABLES) {
+    const [rows] = await db.query(
+      `SELECT idx, round_idx, cck_id, \`group\`
+       FROM \`${tableName}\`
+       WHERE cck_id = ?
+       ORDER BY idx ASC`,
+      [cckId],
+    );
+    roleRows[role] = Array.isArray(rows) ? rows : [];
+  }
+
+  const uniqueRoundIdxs = [...new Set(
+    PLAYER_GROUP_TABLES.flatMap(({ role }) => roleRows[role].map((row) => Number(row.round_idx))).filter(Number.isFinite),
+  )];
+
+  const roundPayloadByIdx = new Map();
+  await Promise.all(
+    uniqueRoundIdxs.map(async (roundIdx) => {
+      const result = await proxyJson(`${RANKING_API_URL}/round/${roundIdx}`);
+      if (!result.ok) return;
+      const roundPayload = extractObjectPayload(result.data);
+      if (!roundPayload || !Number.isFinite(Number(roundPayload.compIdx))) return;
+      roundPayloadByIdx.set(roundIdx, roundPayload);
+    }),
+  );
+
+  const data = {};
+  for (const { role } of PLAYER_GROUP_TABLES) {
+    data[role] = roleRows[role]
+      .filter((row) => {
+        const roundInfo = roundPayloadByIdx.get(Number(row.round_idx));
+        return roundInfo && Number(roundInfo.compIdx) === compIdx;
+      })
+      .map((row) => toPlayerGroupRow(row, roundPayloadByIdx.get(Number(row.round_idx))));
+  }
+
+  return res.json({
+    compIdx,
+    cckId,
+    ...data,
+  });
 });
 
 app.get('/api/competitions', async (req, res) => {
@@ -480,8 +574,10 @@ const run = async () => {
     await ensureDatabase();
     createMainPool();
     await ensureSchema();
+    dbBootstrapErrorMessage = null;
   } catch (error) {
     pool = null;
+    dbBootstrapErrorMessage = error?.sqlMessage || error?.message || String(error);
     console.error('[CCK_Groups_Server] DB bootstrap failed. Starting in degraded mode:', error);
   }
 
