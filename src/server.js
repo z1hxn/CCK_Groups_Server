@@ -70,6 +70,40 @@ const proxyJson = async (url, init = {}) => {
   return { ok: response.ok, status: response.status, data };
 };
 
+const proxyAuthJson = async (req, url, init = {}) => {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {}),
+      ...(init.headers || {}),
+    },
+  });
+
+  const raw = await response.text();
+  let data = null;
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { raw };
+    }
+  }
+
+  const setCookieHeaders =
+    typeof response.headers.getSetCookie === 'function'
+      ? response.headers.getSetCookie()
+      : response.headers.get('set-cookie')
+        ? [response.headers.get('set-cookie')]
+        : [];
+
+  return {
+    status: response.status,
+    data,
+    setCookieHeaders: setCookieHeaders.filter(Boolean),
+  };
+};
+
 const extractListPayload = (payload) => {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.content)) return payload.content;
@@ -124,23 +158,69 @@ const PLAYER_GROUP_TABLES = [
   { role: 'scrambler', tableName: 'group_scrambler' },
 ];
 
+const toPlayerRoundInfo = (roundInfo) => {
+  if (!roundInfo) return null;
+  const roundGroupListRaw = Array.isArray(roundInfo.roundGroupList)
+    ? roundInfo.roundGroupList
+    : Array.isArray(roundInfo.roundGroup)
+      ? roundInfo.roundGroup
+      : [];
+  return {
+    idx: roundInfo.idx,
+    compIdx: roundInfo.compIdx,
+    compName: roundInfo.compName,
+    cubeEventName: roundInfo.cubeEventName,
+    roundName: roundInfo.roundName,
+    eventStart: roundInfo.eventStart,
+    eventEnd: roundInfo.eventEnd,
+    roundGroupList: roundGroupListRaw.map((group) => String(group)).filter(Boolean),
+  };
+};
+
 const toPlayerGroupRow = (row, roundInfo) => ({
   idx: row.idx,
   roundIdx: row.round_idx,
   cckId: row.cck_id,
   group: row.group,
-  round: roundInfo
-    ? {
-        idx: roundInfo.idx,
-        compIdx: roundInfo.compIdx,
-        compName: roundInfo.compName,
-        cubeEventName: roundInfo.cubeEventName,
-        roundName: roundInfo.roundName,
-        eventStart: roundInfo.eventStart,
-        eventEnd: roundInfo.eventEnd,
-      }
-    : null,
+  round: toPlayerRoundInfo(roundInfo),
 });
+
+const normalizeGroupName = (groupName) => {
+  const normalized = String(groupName ?? '').trim();
+  return normalized || '-';
+};
+
+const toGroupAssignments = (roleData) => {
+  const groups = new Map();
+
+  for (const { role } of PLAYER_GROUP_TABLES) {
+    const rows = Array.isArray(roleData[role]) ? roleData[role] : [];
+    for (const row of rows) {
+      const groupName = normalizeGroupName(row.group);
+      let groupItem = groups.get(groupName);
+
+      if (!groupItem) {
+        groupItem = {
+          group: groupName,
+          competition: [],
+          judge: [],
+          runner: [],
+          scrambler: [],
+        };
+        groups.set(groupName, groupItem);
+      }
+
+      groupItem[role].push(row);
+    }
+  }
+
+  return [...groups.values()].sort((a, b) => a.group.localeCompare(b.group, 'ko-KR'));
+};
+
+const resolvePlayerTableName = (role) => {
+  const item = PLAYER_GROUP_TABLES.find((table) => table.role === role);
+  return item?.tableName || null;
+};
 
 const ensureSchema = async () => {
   const sqlPath = path.resolve(process.cwd(), 'src/db/schema.sql');
@@ -236,21 +316,59 @@ app.post('/api/auth/token', async (req, res) => {
   const code = String(req.query.code || '');
   if (!code) return res.status(400).json({ message: 'Missing code' });
 
-  const result = await proxyJson(`${RANKING_API_URL}/auth/token?code=${encodeURIComponent(code)}`, {
+  const result = await proxyAuthJson(req, `${RANKING_API_URL}/auth/token?code=${encodeURIComponent(code)}`, {
     method: 'POST',
   });
+  if (result.setCookieHeaders.length > 0) {
+    res.setHeader('Set-Cookie', result.setCookieHeaders);
+  }
+  return res.status(result.status).json(result.data ?? {});
+});
+
+app.post('/api/auth/refresh', async (req, res) => {
+  const result = await proxyAuthJson(req, `${RANKING_API_URL}/auth/refresh`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(req.body ?? {}),
+  });
+  if (result.setCookieHeaders.length > 0) {
+    res.setHeader('Set-Cookie', result.setCookieHeaders);
+  }
   return res.status(result.status).json(result.data ?? {});
 });
 
 app.post('/api/auth/logout', async (req, res) => {
   const authHeader = req.headers.authorization;
-  const result = await proxyJson(`${RANKING_API_URL}/auth/logout`, {
+  const result = await proxyAuthJson(req, `${RANKING_API_URL}/auth/logout`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(authHeader ? { Authorization: authHeader } : {}),
     },
     body: JSON.stringify(req.body ?? {}),
+  });
+  if (result.setCookieHeaders.length > 0) {
+    res.setHeader('Set-Cookie', result.setCookieHeaders);
+  }
+  return res.status(result.status).json(result.data ?? {});
+});
+
+app.get('/api/auth/info/:cckId', async (req, res) => {
+  const cckId = String(req.params.cckId || '').trim().toLowerCase();
+  if (!cckId) return res.status(400).json({ message: 'Invalid cckId' });
+
+  const result = await proxyAuthJson(req, `${RANKING_API_URL}/auth/info/${encodeURIComponent(cckId)}`);
+  return res.status(result.status).json(result.data ?? {});
+});
+
+app.get('/api/auth/info', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const result = await proxyAuthJson(req, `${RANKING_API_URL}/auth/info`, {
+    headers: {
+      ...(authHeader ? { Authorization: authHeader } : {}),
+    },
   });
   return res.status(result.status).json(result.data ?? {});
 });
@@ -312,6 +430,120 @@ app.get('/api/v1/competition/:compIdx/player/:cckId', async (req, res) => {
     ...data,
   });
 });
+
+app.get('/api/v1/round/:roundIdx', async (req, res) => {
+  const db = getDbPoolOrRespond(res);
+  if (!db) return;
+
+  const roundIdx = Number(req.params.roundIdx);
+  if (!Number.isFinite(roundIdx)) {
+    return res.status(400).json({ message: 'Invalid roundIdx' });
+  }
+
+  const roleRows = {};
+  for (const { role, tableName } of PLAYER_GROUP_TABLES) {
+    const [rows] = await db.query(
+      `SELECT idx, round_idx, cck_id, \`group\`
+       FROM \`${tableName}\`
+       WHERE round_idx = ?
+       ORDER BY \`group\` ASC, cck_id ASC, idx ASC`,
+      [roundIdx],
+    );
+    roleRows[role] = Array.isArray(rows) ? rows : [];
+  }
+
+  const roundResult = await proxyJson(`${RANKING_API_URL}/round/${roundIdx}`);
+  const roundPayload = roundResult.ok ? extractObjectPayload(roundResult.data) : null;
+  const roleData = {};
+
+  for (const { role } of PLAYER_GROUP_TABLES) {
+    roleData[role] = roleRows[role].map((row) => toPlayerGroupRow(row, roundPayload));
+  }
+
+  return res.json({
+    roundIdx,
+    round: toPlayerRoundInfo(roundPayload),
+    ...roleData,
+    groups: toGroupAssignments(roleData),
+  });
+});
+
+const handlePlayerAssignmentUpdate = async (req, res) => {
+  const db = getDbPoolOrRespond(res);
+  if (!db) return;
+
+  const compIdx = Number(req.params.compIdx);
+  const cckId = String(req.body?.cckId || '').trim();
+  const role = String(req.body?.role || '').trim();
+  const roundIdx = Number(req.body?.roundIdx);
+  const requestGroups = Array.isArray(req.body?.groups)
+    ? req.body.groups
+    : req.body?.group == null
+      ? []
+      : [req.body.group];
+
+  if (!Number.isFinite(compIdx)) {
+    return res.status(400).json({ message: 'Invalid compIdx' });
+  }
+  if (!cckId) {
+    return res.status(400).json({ message: 'Invalid cckId' });
+  }
+  if (!Number.isFinite(roundIdx)) {
+    return res.status(400).json({ message: 'Invalid roundIdx' });
+  }
+
+  const tableName = resolvePlayerTableName(role);
+  if (!tableName) {
+    return res.status(400).json({ message: 'Invalid role. Use one of: competition, judge, runner, scrambler' });
+  }
+  const groups = [...new Set(
+    requestGroups
+      .map((item) => String(item || '').trim())
+      .filter(Boolean),
+  )];
+  if (role === 'competition' && groups.length > 1) {
+    return res.status(400).json({ message: 'competition role supports only one group' });
+  }
+
+  const roundResult = await proxyJson(`${RANKING_API_URL}/round/${roundIdx}`);
+  if (!roundResult.ok) {
+    return res.status(roundResult.status).json({ message: 'Failed to validate round', upstream: roundResult.data });
+  }
+  const roundPayload = extractObjectPayload(roundResult.data);
+  if (!roundPayload || Number(roundPayload.compIdx) !== compIdx) {
+    return res.status(400).json({ message: 'roundIdx does not belong to compIdx' });
+  }
+
+  await db.query(
+    `DELETE FROM \`${tableName}\`
+     WHERE cck_id = ? AND round_idx = ?`,
+    [cckId, roundIdx],
+  );
+
+  if (groups.length > 0) {
+    const rows = groups.map((group) => [roundIdx, cckId, group]);
+    await db.query(
+      `INSERT INTO \`${tableName}\` (round_idx, cck_id, \`group\`)
+       VALUES ?`,
+      [rows],
+    );
+  }
+
+  return res.json({
+    data: {
+      compIdx,
+      cckId,
+      role,
+      roundIdx,
+      groups,
+      updated: true,
+    },
+  });
+};
+
+app.post('/api/admin/competition/:compIdx/player-assignment', handlePlayerAssignmentUpdate);
+app.post('/api/admin/competitions/:compIdx/player-assignment', handlePlayerAssignmentUpdate);
+app.post('/api/v1/admin/competition/:compIdx/player-assignment', handlePlayerAssignmentUpdate);
 
 app.get('/api/competitions', async (req, res) => {
   const status = String(req.query.status || 'now');

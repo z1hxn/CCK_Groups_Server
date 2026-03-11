@@ -20,7 +20,10 @@ npm run dev
 - `GET /api/competitions/:competitionId`
 - `GET /api/competitions/:competitionId/rounds/day/:dayCount`
 - `POST /api/auth/token?code=...`
+- `POST /api/auth/refresh`
 - `POST /api/auth/logout`
+- `GET /api/auth/info`
+- `GET /api/auth/info/:cckId`
 - `GET /api/v1/competition/:compIdx/player/:cckId`
 - `GET /api/groups/competitions/:competitionId/config`
 - `PUT /api/groups/competitions/:competitionId/config`
