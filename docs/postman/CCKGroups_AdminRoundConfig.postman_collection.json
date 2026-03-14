@@ -1,0 +1,93 @@
+{
+  "info": {
+    "_postman_id": "cckgroups-admin-round-config-20260314",
+    "name": "CCKGroups_AdminRoundConfig",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "origin", "value": "http://localhost:8080" },
+    { "key": "baseUrl", "value": "{{origin}}/api/v1" },
+    { "key": "compIdx", "value": "71" },
+    { "key": "roundIdx", "value": "1001" }
+  ],
+  "item": [
+    {
+      "name": "GetRoundConfig",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/admin/competition/{{compIdx}}/round/{{roundIdx}}/config",
+        "description": "GET /api/v1/admin/competition/:compIdx/round/:roundIdx/config"
+      }
+    },
+    {
+      "name": "GetRoundConfigAliasConfigs",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/admin/competition/{{compIdx}}/round/{{roundIdx}}/configs",
+        "description": "GET /api/v1/admin/competition/:compIdx/round/:roundIdx/configs"
+      }
+    },
+    {
+      "name": "UpdateRoundConfigPut",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"groups\": [\n    {\n      \"groupName\": \"A\",\n      \"playerCount\": 2,\n      \"judgeCount\": 1,\n      \"runnerCount\": 1,\n      \"scramblerCount\": 1\n    }\n  ]\n}"
+        },
+        "url": "{{baseUrl}}/admin/competition/{{compIdx}}/round/{{roundIdx}}/config",
+        "description": "PUT /api/v1/admin/competition/:compIdx/round/:roundIdx/config"
+      }
+    },
+    {
+      "name": "UpdateRoundConfigPost",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"groups\": [\n    {\n      \"groupName\": \"A\",\n      \"playerCount\": 2,\n      \"judgeCount\": 1,\n      \"runnerCount\": 1,\n      \"scramblerCount\": 1\n    }\n  ]\n}"
+        },
+        "url": "{{baseUrl}}/admin/competition/{{compIdx}}/round/{{roundIdx}}/config",
+        "description": "POST /api/v1/admin/competition/:compIdx/round/:roundIdx/config"
+      }
+    },
+    {
+      "name": "UpdateRoundConfigAliasPutConfigs",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"groups\": [\n    {\n      \"groupName\": \"A\",\n      \"playerCount\": 2,\n      \"judgeCount\": 1,\n      \"runnerCount\": 1,\n      \"scramblerCount\": 1\n    }\n  ]\n}"
+        },
+        "url": "{{baseUrl}}/admin/competition/{{compIdx}}/round/{{roundIdx}}/configs",
+        "description": "PUT /api/v1/admin/competition/:compIdx/round/:roundIdx/configs"
+      }
+    },
+    {
+      "name": "UpdateRoundConfigAliasPostConfigs",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"groups\": [\n    {\n      \"groupName\": \"A\",\n      \"playerCount\": 2,\n      \"judgeCount\": 1,\n      \"runnerCount\": 1,\n      \"scramblerCount\": 1\n    }\n  ]\n}"
+        },
+        "url": "{{baseUrl}}/admin/competition/{{compIdx}}/round/{{roundIdx}}/configs",
+        "description": "POST /api/v1/admin/competition/:compIdx/round/:roundIdx/configs"
+      }
+    }
+  ]
+}

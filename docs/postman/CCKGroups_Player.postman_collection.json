@@ -1,0 +1,34 @@
+{
+  "info": {
+    "_postman_id": "cckgroups-player-20260314",
+    "name": "CCKGroups_Player",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "origin", "value": "http://localhost:8080" },
+    { "key": "baseUrl", "value": "{{origin}}/api/v1" },
+    { "key": "compIdx", "value": "71" },
+    { "key": "roundIdx", "value": "1001" },
+    { "key": "cckId", "value": "testuser" }
+  ],
+  "item": [
+    {
+      "name": "GetPlayerAssignmentsInCompetition",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/competition/{{compIdx}}/player/{{cckId}}",
+        "description": "GET /api/v1/competition/:compIdx/player/:cckId"
+      }
+    },
+    {
+      "name": "GetRoundAssignments",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/round/{{roundIdx}}",
+        "description": "GET /api/v1/round/:roundIdx"
+      }
+    }
+  ]
+}

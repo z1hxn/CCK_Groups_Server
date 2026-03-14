@@ -5,7 +5,7 @@ import { toCompetition, toConfirmedRegistration, toRound } from '../utils/mapper
 export const createCompetitionRouter = ({ config }) => {
   const router = Router();
 
-  router.get('/api/competitions', async (req, res) => {
+  router.get(['/api/v1/competitions', '/api/competitions'], async (req, res) => {
     const status = String(req.query.status || 'now');
     if (!['past', 'now', 'future'].includes(status)) {
       return res.status(400).json({ message: 'Invalid status. Use one of: past, now, future' });
@@ -21,7 +21,7 @@ export const createCompetitionRouter = ({ config }) => {
     return res.json({ status, data: raw.map(toCompetition), source: 'ranking-api' });
   });
 
-  router.get('/api/competitions/:competitionId', async (req, res) => {
+  router.get(['/api/v1/competitions/:competitionId', '/api/competitions/:competitionId'], async (req, res) => {
     const competitionId = Number(req.params.competitionId);
     if (!Number.isFinite(competitionId)) return res.status(400).json({ message: 'Invalid competition id' });
 
@@ -77,7 +77,9 @@ export const createCompetitionRouter = ({ config }) => {
     });
   });
 
-  router.get('/api/competitions/:competitionId/rounds/day/:dayCount', async (req, res) => {
+  router.get(
+    ['/api/v1/competitions/:competitionId/rounds/day/:dayCount', '/api/competitions/:competitionId/rounds/day/:dayCount'],
+    async (req, res) => {
     const competitionId = Number(req.params.competitionId);
     const dayCount = Number(req.params.dayCount);
     if (!Number.isFinite(competitionId) || !Number.isFinite(dayCount)) {
@@ -98,9 +100,12 @@ export const createCompetitionRouter = ({ config }) => {
       },
       source: 'ranking-api',
     });
-  });
+    },
+  );
 
-  router.get('/api/competitions/:competitionId/registrations/confirmed', async (req, res) => {
+  router.get(
+    ['/api/v1/competitions/:competitionId/registrations/confirmed', '/api/competitions/:competitionId/registrations/confirmed'],
+    async (req, res) => {
     const competitionId = Number(req.params.competitionId);
     if (!Number.isFinite(competitionId)) {
       return res.status(400).json({ message: 'Invalid competition id' });
@@ -116,7 +121,8 @@ export const createCompetitionRouter = ({ config }) => {
       data: raw.map(toConfirmedRegistration),
       source: 'payment-api',
     });
-  });
+    },
+  );
 
   return router;
 };

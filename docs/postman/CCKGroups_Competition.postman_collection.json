@@ -1,0 +1,52 @@
+{
+  "info": {
+    "_postman_id": "cckgroups-competition-20260314",
+    "name": "CCKGroups_Competition",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "origin", "value": "http://localhost:8080" },
+    { "key": "baseUrl", "value": "{{origin}}/api/v1" },
+    { "key": "competitionId", "value": "71" },
+    { "key": "dayCount", "value": "0" },
+    { "key": "status", "value": "now" }
+  ],
+  "item": [
+    {
+      "name": "GetCompetitions",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/competitions?status={{status}}",
+        "description": "GET /api/v1/competitions?status=past|now|future"
+      }
+    },
+    {
+      "name": "GetCompetitionDetail",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/competitions/{{competitionId}}",
+        "description": "GET /api/v1/competitions/:competitionId"
+      }
+    },
+    {
+      "name": "GetRoundsByDay",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/competitions/{{competitionId}}/rounds/day/{{dayCount}}",
+        "description": "GET /api/v1/competitions/:competitionId/rounds/day/:dayCount"
+      }
+    },
+    {
+      "name": "GetConfirmedRegistrations",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/competitions/{{competitionId}}/registrations/confirmed",
+        "description": "GET /api/v1/competitions/:competitionId/registrations/confirmed"
+      }
+    }
+  ]
+}

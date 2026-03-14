@@ -3,7 +3,7 @@ import { Router } from 'express';
 export const createHealthRouter = ({ config, getPool, getDbBootstrapErrorMessage }) => {
   const router = Router();
 
-  router.get('/api/health', async (_req, res) => {
+  router.get(['/api/v1/health', '/api/health'], async (_req, res) => {
     const pool = getPool();
     if (!pool) {
       return res.json({

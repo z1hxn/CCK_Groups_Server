@@ -1,0 +1,107 @@
+{
+  "info": {
+    "_postman_id": "cckgroups-admin-assignment-20260314",
+    "name": "CCKGroups_AdminAssignment",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "origin", "value": "http://localhost:8080" },
+    { "key": "baseUrl", "value": "{{origin}}/api/v1" },
+    { "key": "compIdx", "value": "71" },
+    { "key": "roundIdx", "value": "1001" },
+    { "key": "cckId", "value": "testuser" },
+    { "key": "confirmCompetitionName", "value": "테스트대회" }
+  ],
+  "item": [
+    {
+      "name": "UpdatePlayerAssignment",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cckId\": \"{{cckId}}\",\n  \"role\": \"judge\",\n  \"roundIdx\": {{roundIdx}},\n  \"groups\": [\"A\"]\n}"
+        },
+        "url": "{{baseUrl}}/admin/competition/{{compIdx}}/player-assignment",
+        "description": "POST /api/v1/admin/competition/:compIdx/player-assignment"
+      }
+    },
+    {
+      "name": "UpdatePlayerAssignmentAliasCompetitions",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cckId\": \"{{cckId}}\",\n  \"role\": \"judge\",\n  \"roundIdx\": {{roundIdx}},\n  \"groups\": [\"A\"]\n}"
+        },
+        "url": "{{baseUrl}}/admin/competitions/{{compIdx}}/player-assignment",
+        "description": "POST /api/v1/admin/competitions/:compIdx/player-assignment"
+      }
+    },
+    {
+      "name": "AutoAssign",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"confirmCompetitionName\": \"{{confirmCompetitionName}}\",\n  \"scramblerCandidateCckIds\": [\"scrambler1\", \"scrambler2\"],\n  \"excludedCckIds\": [\"exclude1\"],\n  \"scrambler\": {\n    \"candidateCckIds\": [\"scrambler1\", \"scrambler2\"]\n  },\n  \"exclusion\": {\n    \"cckIds\": [\"exclude1\"]\n  }\n}"
+        },
+        "url": "{{baseUrl}}/admin/competition/{{compIdx}}/auto-assign",
+        "description": "POST /api/v1/admin/competition/:compIdx/auto-assign"
+      }
+    },
+    {
+      "name": "AutoAssignAliasCompetitions",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"confirmCompetitionName\": \"{{confirmCompetitionName}}\",\n  \"scramblerCandidateCckIds\": [\"scrambler1\", \"scrambler2\"],\n  \"excludedCckIds\": [\"exclude1\"],\n  \"scrambler\": {\n    \"candidateCckIds\": [\"scrambler1\", \"scrambler2\"]\n  },\n  \"exclusion\": {\n    \"cckIds\": [\"exclude1\"]\n  }\n}"
+        },
+        "url": "{{baseUrl}}/admin/competitions/{{compIdx}}/auto-assign",
+        "description": "POST /api/v1/admin/competitions/:compIdx/auto-assign"
+      }
+    },
+    {
+      "name": "ResetAssignments",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"confirmCompetitionName\": \"{{confirmCompetitionName}}\"\n}"
+        },
+        "url": "{{baseUrl}}/admin/competition/{{compIdx}}/reset-assignments",
+        "description": "POST /api/v1/admin/competition/:compIdx/reset-assignments"
+      }
+    },
+    {
+      "name": "ResetAssignmentsAliasCompetitions",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"confirmCompetitionName\": \"{{confirmCompetitionName}}\"\n}"
+        },
+        "url": "{{baseUrl}}/admin/competitions/{{compIdx}}/reset-assignments",
+        "description": "POST /api/v1/admin/competitions/:compIdx/reset-assignments"
+      }
+    }
+  ]
+}
