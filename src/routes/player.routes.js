@@ -6,6 +6,7 @@ import {
   GROUP_ASSIGNMENT_TABLE_NAME,
   resolveApiRoleFromDbRole,
 } from '../utils/groupTables.js';
+import { normalizeCckId } from '../utils/cckId.js';
 import { extractObjectPayload, proxyJson } from '../utils/http.js';
 import { toPlayerGroupRow, toPlayerRoundInfo } from '../utils/mappers.js';
 
@@ -17,7 +18,7 @@ export const createPlayerRouter = ({ config, getDbPoolOrRespond }) => {
     if (!db) return;
 
     const compIdx = Number(req.params.compIdx);
-    const cckId = String(req.params.cckId || '').trim();
+    const cckId = normalizeCckId(req.params.cckId);
 
     if (!Number.isFinite(compIdx)) {
       return res.status(400).json({ message: 'Invalid compIdx' });
@@ -30,7 +31,7 @@ export const createPlayerRouter = ({ config, getDbPoolOrRespond }) => {
     const [assignmentRows] = await db.query(
       `SELECT idx, round_idx, cck_id, group_name, role
        FROM \`${GROUP_ASSIGNMENT_TABLE_NAME}\`
-       WHERE cck_id = ?
+       WHERE UPPER(cck_id) = ?
        ORDER BY idx ASC`,
       [cckId],
     );

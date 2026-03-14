@@ -4,6 +4,7 @@ import {
   normalizeAssignmentApiRole,
   resolveDbRole,
 } from '../utils/groupTables.js';
+import { normalizeCckId } from '../utils/cckId.js';
 import { getConfiguredRoundGroups, validateRoundBelongsToCompetition } from '../utils/roundGroups.js';
 import { extractListPayload, extractObjectPayload, proxyJson } from '../utils/http.js';
 import { toConfirmedRegistration } from '../utils/mappers.js';
@@ -124,7 +125,7 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
     const raw = extractListPayload(result.data);
     const registrations = raw.map(toConfirmedRegistration).map((item) => ({
       ...item,
-      cckId: String(item.cckId || '').trim().toLowerCase(),
+      cckId: normalizeCckId(item.cckId),
       selectedEvents: Array.isArray(item.selectedEvents) ? item.selectedEvents : [],
     }));
     return { ok: true, registrations };
@@ -230,7 +231,7 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
     if (!db) return;
 
     const compIdx = Number(req.params.compIdx);
-    const cckId = String(req.body?.cckId || '').trim();
+    const cckId = normalizeCckId(req.body?.cckId);
     const requestedRole = String(req.body?.role || '').trim();
     const roundIdx = Number(req.body?.roundIdx);
     const requestGroups = Array.isArray(req.body?.groups)
@@ -270,7 +271,7 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
 
     await db.query(
       `DELETE FROM \`${GROUP_ASSIGNMENT_TABLE_NAME}\`
-       WHERE cck_id = ? AND round_idx = ? AND role = ?`,
+       WHERE UPPER(cck_id) = ? AND round_idx = ? AND role = ?`,
       [cckId, roundIdx, dbRole],
     );
 
@@ -389,7 +390,7 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
               ? req.body.scramblerCckIds
               : req.body?.scramblers ?? []
       )
-        .map((item) => String(item || '').trim().toLowerCase())
+        .map((item) => normalizeCckId(item))
         .filter(Boolean),
     );
     const excludedAutoAssignSet = new Set(
@@ -402,7 +403,7 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
               ? req.body.blockedCckIds
               : req.body?.excluded ?? []
       )
-        .map((item) => String(item || '').trim().toLowerCase())
+        .map((item) => normalizeCckId(item))
         .filter(Boolean),
     );
 
@@ -700,7 +701,7 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
       const unique = [];
       for (const row of rows) {
         const roundIdx = Number(row?.[0]);
-        const cckId = String(row?.[1] || '').trim().toLowerCase();
+        const cckId = normalizeCckId(row?.[1]);
         const role = String(row?.[3] || '').trim().toLowerCase();
         const key = `${roundIdx}|${cckId}|${role}`;
         if (!Number.isFinite(roundIdx) || !cckId || !role || seen.has(key)) continue;

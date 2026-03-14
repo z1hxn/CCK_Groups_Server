@@ -36,3 +36,4 @@ npm run dev
 - DB `role`(현행): `competitor | judge | runner | scrambler`
 - API 응답 키: `competitor | judge | runner | scrambler`
 - `player-assignment` 입력 `role`: `competitor | judge | runner | scrambler`
+- CCK ID 처리: 요청/저장/응답 모두 대문자(`UPPERCASE`)로 정규화

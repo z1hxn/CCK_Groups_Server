@@ -1,3 +1,5 @@
+import { normalizeCckId } from './cckId.js';
+
 export const toCompetition = (dto) => ({
   id: dto.idx,
   name: dto.compName,
@@ -23,7 +25,7 @@ export const toConfirmedRegistration = (dto) => ({
   competitionName: dto.competitionName,
   name: dto.name,
   enName: dto.enName,
-  cckId: dto.cckId,
+  cckId: normalizeCckId(dto.cckId),
   selectedEvents: Array.isArray(dto.selectedEvents) ? dto.selectedEvents : [],
   totalFee: dto.totalFee ?? 0,
   paymentStatus: dto.paymentStatus ?? '',
@@ -54,7 +56,7 @@ export const toPlayerRoundInfo = (roundInfo) => {
 export const toPlayerGroupRow = (row, roundInfo) => ({
   idx: row.idx,
   roundIdx: row.round_idx,
-  cckId: row.cck_id,
+  cckId: normalizeCckId(row.cck_id),
   group: row.group_name ?? row.group,
   round: toPlayerRoundInfo(roundInfo),
 });

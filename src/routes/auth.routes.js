@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { proxyAuthJson } from '../utils/http.js';
+import { normalizeCckId } from '../utils/cckId.js';
 
 export const createAuthRouter = ({ config }) => {
   const router = Router();
@@ -48,7 +49,7 @@ export const createAuthRouter = ({ config }) => {
   });
 
   router.get(['/api/v1/auth/info/:cckId', '/api/auth/info/:cckId'], async (req, res) => {
-    const cckId = String(req.params.cckId || '').trim().toLowerCase();
+    const cckId = normalizeCckId(req.params.cckId);
     if (!cckId) return res.status(400).json({ message: 'Invalid cckId' });
 
     const result = await proxyAuthJson(req, `${config.rankingApiUrl}/auth/info/${encodeURIComponent(cckId)}`);

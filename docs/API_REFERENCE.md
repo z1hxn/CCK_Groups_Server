@@ -99,3 +99,4 @@
 - DB `role` 값(현행): `competitor|judge|runner|scrambler`
 - API 응답 키: `competitor|judge|runner|scrambler`
 - `player-assignment` 요청의 `role`은 `competitor|judge|runner|scrambler`만 허용됩니다.
+- CCK ID는 요청/저장/응답 시 대문자(`UPPERCASE`)로 정규화됩니다.
