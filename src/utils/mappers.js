@@ -55,6 +55,6 @@ export const toPlayerGroupRow = (row, roundInfo) => ({
   idx: row.idx,
   roundIdx: row.round_idx,
   cckId: row.cck_id,
-  group: row.group,
+  group: row.group_name ?? row.group,
   round: toPlayerRoundInfo(roundInfo),
 });

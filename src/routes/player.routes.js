@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { getConfiguredRoundGroups } from '../utils/roundGroups.js';
 import { toGroupAssignments } from '../utils/groups.js';
-import { PLAYER_GROUP_TABLES } from '../utils/groupTables.js';
+import {
+  ASSIGNMENT_API_ROLES,
+  GROUP_ASSIGNMENT_TABLE_NAME,
+  resolveApiRoleFromDbRole,
+} from '../utils/groupTables.js';
 import { extractObjectPayload, proxyJson } from '../utils/http.js';
 import { toPlayerGroupRow, toPlayerRoundInfo } from '../utils/mappers.js';
 
@@ -22,20 +26,22 @@ export const createPlayerRouter = ({ config, getDbPoolOrRespond }) => {
       return res.status(400).json({ message: 'Invalid cckId' });
     }
 
-    const roleRows = {};
-    for (const { role, tableName } of PLAYER_GROUP_TABLES) {
-      const [rows] = await db.query(
-        `SELECT idx, round_idx, cck_id, \`group\`
-         FROM \`${tableName}\`
-         WHERE cck_id = ?
-         ORDER BY idx ASC`,
-        [cckId],
-      );
-      roleRows[role] = Array.isArray(rows) ? rows : [];
+    const roleRows = Object.fromEntries(ASSIGNMENT_API_ROLES.map((role) => [role, []]));
+    const [assignmentRows] = await db.query(
+      `SELECT idx, round_idx, cck_id, group_name, role
+       FROM \`${GROUP_ASSIGNMENT_TABLE_NAME}\`
+       WHERE cck_id = ?
+       ORDER BY idx ASC`,
+      [cckId],
+    );
+    for (const row of Array.isArray(assignmentRows) ? assignmentRows : []) {
+      const apiRole = resolveApiRoleFromDbRole(row.role);
+      if (!apiRole) continue;
+      roleRows[apiRole].push(row);
     }
 
     const uniqueRoundIdxs = [...new Set(
-      PLAYER_GROUP_TABLES.flatMap(({ role }) => roleRows[role].map((row) => Number(row.round_idx))).filter(Number.isFinite),
+      ASSIGNMENT_API_ROLES.flatMap((role) => roleRows[role].map((row) => Number(row.round_idx))).filter(Number.isFinite),
     )];
 
     const roundPayloadByIdx = new Map();
@@ -50,7 +56,7 @@ export const createPlayerRouter = ({ config, getDbPoolOrRespond }) => {
     );
 
     const data = {};
-    for (const { role } of PLAYER_GROUP_TABLES) {
+    for (const role of ASSIGNMENT_API_ROLES) {
       data[role] = roleRows[role]
         .filter((row) => {
           const roundInfo = roundPayloadByIdx.get(Number(row.round_idx));
@@ -75,16 +81,18 @@ export const createPlayerRouter = ({ config, getDbPoolOrRespond }) => {
       return res.status(400).json({ message: 'Invalid roundIdx' });
     }
 
-    const roleRows = {};
-    for (const { role, tableName } of PLAYER_GROUP_TABLES) {
-      const [rows] = await db.query(
-        `SELECT idx, round_idx, cck_id, \`group\`
-         FROM \`${tableName}\`
-         WHERE round_idx = ?
-         ORDER BY \`group\` ASC, cck_id ASC, idx ASC`,
-        [roundIdx],
-      );
-      roleRows[role] = Array.isArray(rows) ? rows : [];
+    const roleRows = Object.fromEntries(ASSIGNMENT_API_ROLES.map((role) => [role, []]));
+    const [assignmentRows] = await db.query(
+      `SELECT idx, round_idx, cck_id, group_name, role
+       FROM \`${GROUP_ASSIGNMENT_TABLE_NAME}\`
+       WHERE round_idx = ?
+       ORDER BY group_name ASC, cck_id ASC, idx ASC`,
+      [roundIdx],
+    );
+    for (const row of Array.isArray(assignmentRows) ? assignmentRows : []) {
+      const apiRole = resolveApiRoleFromDbRole(row.role);
+      if (!apiRole) continue;
+      roleRows[apiRole].push(row);
     }
 
     const roundResult = await proxyJson(`${config.rankingApiUrl}/round/${roundIdx}`);
@@ -99,7 +107,7 @@ export const createPlayerRouter = ({ config, getDbPoolOrRespond }) => {
       : null;
     const roleData = {};
 
-    for (const { role } of PLAYER_GROUP_TABLES) {
+    for (const role of ASSIGNMENT_API_ROLES) {
       roleData[role] = roleRows[role].map((row) => toPlayerGroupRow(row, effectiveRoundPayload));
     }
 

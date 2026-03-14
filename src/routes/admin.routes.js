@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import { PLAYER_GROUP_TABLES, resolvePlayerTableName } from '../utils/groupTables.js';
+import {
+  GROUP_ASSIGNMENT_TABLE_NAME,
+  normalizeAssignmentApiRole,
+  resolveDbRole,
+} from '../utils/groupTables.js';
 import { getConfiguredRoundGroups, validateRoundBelongsToCompetition } from '../utils/roundGroups.js';
 import { extractListPayload, extractObjectPayload, proxyJson } from '../utils/http.js';
 import { toConfirmedRegistration } from '../utils/mappers.js';
@@ -100,10 +104,8 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
       deletedRows += Number(roundGroupResult?.affectedRows || 0);
     }
 
-    for (const { tableName } of PLAYER_GROUP_TABLES) {
-      const [result] = await conn.query(`DELETE FROM \`${tableName}\` WHERE round_idx IN (?)`, [roundIdxs]);
-      deletedRows += Number(result?.affectedRows || 0);
-    }
+    const [result] = await conn.query(`DELETE FROM \`${GROUP_ASSIGNMENT_TABLE_NAME}\` WHERE round_idx IN (?)`, [roundIdxs]);
+    deletedRows += Number(result?.affectedRows || 0);
 
     return { deletedRows };
   };
@@ -229,7 +231,7 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
 
     const compIdx = Number(req.params.compIdx);
     const cckId = String(req.body?.cckId || '').trim();
-    const role = String(req.body?.role || '').trim();
+    const requestedRole = String(req.body?.role || '').trim();
     const roundIdx = Number(req.body?.roundIdx);
     const requestGroups = Array.isArray(req.body?.groups)
       ? req.body.groups
@@ -247,17 +249,18 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
       return res.status(400).json({ message: 'Invalid roundIdx' });
     }
 
-    const tableName = resolvePlayerTableName(role);
-    if (!tableName) {
-      return res.status(400).json({ message: 'Invalid role. Use one of: competition, judge, runner, scrambler' });
+    const role = normalizeAssignmentApiRole(requestedRole);
+    const dbRole = resolveDbRole(requestedRole);
+    if (!role || !dbRole) {
+      return res.status(400).json({ message: 'Invalid role. Use one of: competitor, judge, runner, scrambler' });
     }
     const groups = [...new Set(
       requestGroups
         .map((item) => String(item || '').trim())
         .filter(Boolean),
     )];
-    if (role === 'competition' && groups.length > 1) {
-      return res.status(400).json({ message: 'competition role supports only one group' });
+    if (role === 'competitor' && groups.length > 1) {
+      return res.status(400).json({ message: 'competitor role supports only one group' });
     }
 
     const validation = await validateRoundBelongsToCompetition(config.rankingApiUrl, compIdx, roundIdx);
@@ -266,15 +269,15 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
     }
 
     await db.query(
-      `DELETE FROM \`${tableName}\`
-       WHERE cck_id = ? AND round_idx = ?`,
-      [cckId, roundIdx],
+      `DELETE FROM \`${GROUP_ASSIGNMENT_TABLE_NAME}\`
+       WHERE cck_id = ? AND round_idx = ? AND role = ?`,
+      [cckId, roundIdx, dbRole],
     );
 
     if (groups.length > 0) {
-      const rows = groups.map((group) => [roundIdx, cckId, group]);
+      const rows = groups.map((group) => [roundIdx, cckId, group, dbRole]);
       await db.query(
-        `INSERT INTO \`${tableName}\` (round_idx, cck_id, \`group\`)
+        `INSERT INTO \`${GROUP_ASSIGNMENT_TABLE_NAME}\` (round_idx, cck_id, group_name, role)
          VALUES ?`,
         [rows],
       );
@@ -427,10 +430,8 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
     const registrationCckIds = [...new Set(registrations.map((item) => item.cckId))];
     const isAdminByCckId = await getAdminFlagMap(registrationCckIds);
 
-    const playerRows = [];
-    const judgeRows = [];
-    const runnerRows = [];
-    const scramblerRows = [];
+    const assignmentRows = [];
+    const competitorDbRole = resolveDbRole('competitor') || 'competitor';
     const roundSummaries = [];
 
     for (const round of rounds) {
@@ -618,10 +619,10 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
       }
 
       for (const group of groupState) {
-        for (const cckId of group.players) playerRows.push([roundIdx, cckId, group.groupName]);
-        for (const cckId of group.scramblers) scramblerRows.push([roundIdx, cckId, group.groupName]);
-        for (const cckId of group.runners) runnerRows.push([roundIdx, cckId, group.groupName]);
-        for (const cckId of group.judges) judgeRows.push([roundIdx, cckId, group.groupName]);
+        for (const cckId of group.players) assignmentRows.push([roundIdx, cckId, group.groupName, competitorDbRole]);
+        for (const cckId of group.scramblers) assignmentRows.push([roundIdx, cckId, group.groupName, 'scrambler']);
+        for (const cckId of group.runners) assignmentRows.push([roundIdx, cckId, group.groupName, 'runner']);
+        for (const cckId of group.judges) assignmentRows.push([roundIdx, cckId, group.groupName, 'judge']);
       }
 
       const playerAssigned = groupState.reduce((sum, item) => sum + item.players.length, 0);
@@ -694,23 +695,32 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
       });
     }
 
-    const dedupeRoleRowsByRoundAndCck = (rows) => {
+    const dedupeAssignmentRows = (rows) => {
       const seen = new Set();
       const unique = [];
       for (const row of rows) {
         const roundIdx = Number(row?.[0]);
         const cckId = String(row?.[1] || '').trim().toLowerCase();
-        const key = `${roundIdx}|${cckId}`;
-        if (!Number.isFinite(roundIdx) || !cckId || seen.has(key)) continue;
+        const role = String(row?.[3] || '').trim().toLowerCase();
+        const key = `${roundIdx}|${cckId}|${role}`;
+        if (!Number.isFinite(roundIdx) || !cckId || !role || seen.has(key)) continue;
         seen.add(key);
-        unique.push([roundIdx, cckId, String(row?.[2] || '').trim()]);
+        unique.push([roundIdx, cckId, String(row?.[2] || '').trim(), role]);
       }
       return unique;
     };
-    const safePlayerRows = dedupeRoleRowsByRoundAndCck(playerRows);
-    const safeScramblerRows = dedupeRoleRowsByRoundAndCck(scramblerRows);
-    const safeRunnerRows = dedupeRoleRowsByRoundAndCck(runnerRows);
-    const safeJudgeRows = dedupeRoleRowsByRoundAndCck(judgeRows);
+    const safeAssignmentRows = dedupeAssignmentRows(assignmentRows);
+    const insertedCounts = safeAssignmentRows.reduce(
+      (acc, row) => {
+        const role = String(row?.[3] || '').trim().toLowerCase();
+        if (role === 'competitor') acc.competitor += 1;
+        if (role === 'scrambler') acc.scrambler += 1;
+        if (role === 'runner') acc.runner += 1;
+        if (role === 'judge') acc.judge += 1;
+        return acc;
+      },
+      { competitor: 0, judge: 0, runner: 0, scrambler: 0 },
+    );
 
     const conn = await db.getConnection();
     try {
@@ -718,17 +728,11 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
       const roundIdxs = rounds.map((item) => Number(item.idx)).filter(Number.isFinite);
       await deleteAssignmentsByRoundIdxs(conn, roundIdxs, { includeRoundGroup: false });
 
-      if (safePlayerRows.length > 0) {
-        await conn.query('INSERT INTO group_competition (round_idx, cck_id, `group`) VALUES ?', [safePlayerRows]);
-      }
-      if (safeScramblerRows.length > 0) {
-        await conn.query('INSERT INTO group_scrambler (round_idx, cck_id, `group`) VALUES ?', [safeScramblerRows]);
-      }
-      if (safeRunnerRows.length > 0) {
-        await conn.query('INSERT INTO group_runner (round_idx, cck_id, `group`) VALUES ?', [safeRunnerRows]);
-      }
-      if (safeJudgeRows.length > 0) {
-        await conn.query('INSERT INTO group_judge (round_idx, cck_id, `group`) VALUES ?', [safeJudgeRows]);
+      if (safeAssignmentRows.length > 0) {
+        await conn.query(
+          `INSERT INTO \`${GROUP_ASSIGNMENT_TABLE_NAME}\` (round_idx, cck_id, group_name, role) VALUES ?`,
+          [safeAssignmentRows],
+        );
       }
 
       await conn.commit();
@@ -755,12 +759,7 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
             excludedRunnerJudgeCount: excludedAutoAssignSet.size,
           },
           rounds: roundSummaries,
-          inserted: {
-            competition: safePlayerRows.length,
-            scrambler: safeScramblerRows.length,
-            runner: safeRunnerRows.length,
-            judge: safeJudgeRows.length,
-          },
+          inserted: insertedCounts,
           needsManualAssignment: staffDeficitRounds.length > 0,
           manualAssignmentRoundCount: staffDeficitRounds.length,
           manualAssignmentRounds: staffDeficitRounds.map((round) => ({

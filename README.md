@@ -25,7 +25,14 @@ npm run dev
 - `GET /api/auth/info`
 - `GET /api/auth/info/:cckId`
 - `GET /api/v1/competition/:compIdx/player/:cckId`
-- `GET /api/groups/competitions/:competitionId/config`
-- `PUT /api/groups/competitions/:competitionId/config`
-- `GET /api/groups/competitions/:competitionId/assignments`
-- `POST /api/groups/competitions/:competitionId/assignments/bulk`
+- `GET /api/v1/round/:roundIdx`
+- `POST /api/v1/admin/competition/:compIdx/player-assignment`
+- `POST /api/v1/admin/competition/:compIdx/auto-assign`
+- `POST /api/v1/admin/competition/:compIdx/reset-assignments`
+
+## Assignment Role Keys
+
+- 저장 테이블: `group_assignment`
+- DB `role`(현행): `competitor | judge | runner | scrambler`
+- API 응답 키: `competitor | judge | runner | scrambler`
+- `player-assignment` 입력 `role`: `competitor | judge | runner | scrambler`

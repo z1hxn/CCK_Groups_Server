@@ -1,4 +1,4 @@
-import { PLAYER_GROUP_TABLES } from './groupTables.js';
+import { ASSIGNMENT_API_ROLES } from './groupTables.js';
 
 const normalizeGroupName = (groupName) => {
   const normalized = String(groupName ?? '').trim();
@@ -8,7 +8,7 @@ const normalizeGroupName = (groupName) => {
 export const toGroupAssignments = (roleData) => {
   const groups = new Map();
 
-  for (const { role } of PLAYER_GROUP_TABLES) {
+  for (const role of ASSIGNMENT_API_ROLES) {
     const rows = Array.isArray(roleData[role]) ? roleData[role] : [];
     for (const row of rows) {
       const groupName = normalizeGroupName(row.group);
@@ -17,7 +17,7 @@ export const toGroupAssignments = (roleData) => {
       if (!groupItem) {
         groupItem = {
           group: groupName,
-          competition: [],
+          competitor: [],
           judge: [],
           runner: [],
           scrambler: [],

@@ -55,7 +55,7 @@
 ## Admin - Assignment
 | Name | Method | Path | Body | 설명 |
 |---|---|---|---|---|
-| Update Player Assignment | `POST` | `/api/v1/admin/competition/:compIdx/player-assignment` | `{ "cckId":"user1", "role":"competition|judge|runner|scrambler", "roundIdx":123, "groups":["A"] }` | 단일 유저 역할 배정 업데이트 |
+| Update Player Assignment | `POST` | `/api/v1/admin/competition/:compIdx/player-assignment` | `{ "cckId":"user1", "role":"competitor|judge|runner|scrambler", "roundIdx":123, "groups":["A"] }` | 단일 유저 역할 배정 업데이트 |
 | Update Player Assignment (Alias plural) | `POST` | `/api/v1/admin/competitions/:compIdx/player-assignment` | 동일 | 위와 동일(별칭) |
 | Auto Assign | `POST` | `/api/v1/admin/competition/:compIdx/auto-assign` | 아래 샘플 참고 | 자동 배정 실행 |
 | Auto Assign (Alias plural) | `POST` | `/api/v1/admin/competitions/:compIdx/auto-assign` | 동일 | 위와 동일(별칭) |
@@ -90,6 +90,12 @@
   - `data.reset`
 - Auto-assign 성공:
   - `data.rounds[]` (라운드별 충족 여부/사유)
-  - `data.inserted` (`competition/scrambler/runner/judge`)
+  - `data.inserted` (`competitor/scrambler/runner/judge`)
   - `data.needsManualAssignment`
   - `data.manualAssignmentRounds[]`
+
+## Assignment Data Shape
+- 조편성 저장 테이블: `group_assignment`
+- DB `role` 값(현행): `competitor|judge|runner|scrambler`
+- API 응답 키: `competitor|judge|runner|scrambler`
+- `player-assignment` 요청의 `role`은 `competitor|judge|runner|scrambler`만 허용됩니다.
