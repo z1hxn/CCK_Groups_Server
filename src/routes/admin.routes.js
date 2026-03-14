@@ -1,9 +1,71 @@
 import { Router } from 'express';
-import { resolvePlayerTableName } from '../utils/groupTables.js';
+import { PLAYER_GROUP_TABLES, resolvePlayerTableName } from '../utils/groupTables.js';
 import { getConfiguredRoundGroups, validateRoundBelongsToCompetition } from '../utils/roundGroups.js';
+import { extractListPayload, extractObjectPayload, proxyJson } from '../utils/http.js';
 
 export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
   const router = Router();
+
+  const getCompetitionRoundIdxs = async (compIdx) => {
+    const compResult = await proxyJson(`${config.rankingApiUrl}/comp/${compIdx}`);
+    if (!compResult.ok) {
+      return {
+        ok: false,
+        status: compResult.status,
+        message: 'Failed to fetch competition detail',
+        upstream: compResult.data,
+      };
+    }
+
+    const compPayload = extractObjectPayload(compResult.data);
+    if (!compPayload) {
+      return {
+        ok: false,
+        status: 502,
+        message: 'Invalid competition payload',
+        upstream: compResult.data,
+      };
+    }
+
+    const start = new Date(compPayload.compDateStart);
+    const end = new Date(compPayload.compDateEnd);
+    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
+      return {
+        ok: true,
+        competitionName: String(compPayload.compName ?? compPayload.name ?? '').trim(),
+        roundIdxs: [],
+      };
+    }
+
+    const dayResults = [];
+    let dayCount = 0;
+    const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    while (cursor <= last) {
+      dayResults.push(proxyJson(`${config.rankingApiUrl}/round/${compIdx}/day-count/${dayCount}`));
+      cursor.setDate(cursor.getDate() + 1);
+      dayCount += 1;
+    }
+
+    const roundDayResponses = await Promise.all(dayResults);
+    const allRoundRows = roundDayResponses.flatMap((responseItem) => {
+      const past = extractListPayload(responseItem.data?.past ?? responseItem.data?.data?.past);
+      const now = extractListPayload(responseItem.data?.now ?? responseItem.data?.data?.now);
+      const future = extractListPayload(responseItem.data?.future ?? responseItem.data?.data?.future);
+      return [...past, ...now, ...future];
+    });
+    const roundIdxs = [...new Set(
+      allRoundRows
+        .map((item) => Number(item?.idx))
+        .filter(Number.isFinite),
+    )];
+
+    return {
+      ok: true,
+      competitionName: String(compPayload.compName ?? compPayload.name ?? '').trim(),
+      roundIdxs,
+    };
+  };
 
   const handleRoundGroupConfigUpdate = async (req, res) => {
     const db = getDbPoolOrRespond(res);
@@ -178,6 +240,62 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
     });
   };
 
+  const handleResetCompetitionAssignments = async (req, res) => {
+    const db = getDbPoolOrRespond(res);
+    if (!db) return;
+
+    const compIdx = Number(req.params.compIdx);
+    if (!Number.isFinite(compIdx)) return res.status(400).json({ message: 'Invalid compIdx' });
+
+    const confirmation = String(req.body?.confirmCompetitionName || '').trim();
+    if (!confirmation) {
+      return res.status(400).json({ message: 'confirmCompetitionName is required' });
+    }
+
+    const roundsResult = await getCompetitionRoundIdxs(compIdx);
+    if (!roundsResult.ok) {
+      return res.status(roundsResult.status).json({ message: roundsResult.message, upstream: roundsResult.upstream });
+    }
+
+    const competitionName = String(roundsResult.competitionName || '').trim();
+    if (competitionName && confirmation !== competitionName) {
+      return res.status(400).json({ message: 'Competition name confirmation mismatch' });
+    }
+
+    const roundIdxs = roundsResult.roundIdxs;
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      let deletedRows = 0;
+      if (roundIdxs.length > 0) {
+        const [roundGroupResult] = await conn.query('DELETE FROM round_group WHERE round_idx IN (?)', [roundIdxs]);
+        deletedRows += Number(roundGroupResult?.affectedRows || 0);
+
+        for (const { tableName } of PLAYER_GROUP_TABLES) {
+          const [result] = await conn.query(`DELETE FROM \`${tableName}\` WHERE round_idx IN (?)`, [roundIdxs]);
+          deletedRows += Number(result?.affectedRows || 0);
+        }
+      }
+
+      await conn.commit();
+      return res.json({
+        data: {
+          compIdx,
+          competitionName,
+          roundCount: roundIdxs.length,
+          deletedRows,
+          reset: true,
+        },
+      });
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
+  };
+
   router.get('/api/admin/competition/:compIdx/round/:roundIdx/config', sendRoundConfig);
   router.get('/api/admin/competition/:compIdx/round/:roundIdx/configs', sendRoundConfig);
 
@@ -189,6 +307,9 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
   router.post('/api/admin/competition/:compIdx/player-assignment', handlePlayerAssignmentUpdate);
   router.post('/api/admin/competitions/:compIdx/player-assignment', handlePlayerAssignmentUpdate);
   router.post('/api/v1/admin/competition/:compIdx/player-assignment', handlePlayerAssignmentUpdate);
+  router.post('/api/admin/competition/:compIdx/reset-assignments', handleResetCompetitionAssignments);
+  router.post('/api/admin/competitions/:compIdx/reset-assignments', handleResetCompetitionAssignments);
+  router.post('/api/v1/admin/competition/:compIdx/reset-assignments', handleResetCompetitionAssignments);
 
   return router;
 };
