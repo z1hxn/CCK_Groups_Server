@@ -309,6 +309,7 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
       const eventCode = toEventCode(item?.eventCode ?? item?.code ?? item?.eventName);
       if (!eventCode) continue;
       eventImageByCode.set(eventCode, {
+        displayLabel: String(item?.displayLabel ?? item?.label ?? '').trim(),
         enablePath: String(item?.enablePath ?? item?.enabledPath ?? '').trim(),
         disablePath: String(item?.disablePath ?? item?.disabledPath ?? '').trim(),
       });
@@ -316,11 +317,11 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
 
     const missingImageEvents = eventDescriptors.filter((event) => {
       const configItem = eventImageByCode.get(event.eventCode);
-      return !configItem?.enablePath || !configItem?.disablePath;
+      return !configItem?.displayLabel || !configItem?.enablePath || !configItem?.disablePath;
     });
     if (missingImageEvents.length > 0) {
       return res.status(400).json({
-        message: `Missing event image paths: ${missingImageEvents.map((item) => item.eventCode).join(', ')}`,
+        message: `Missing event export config: ${missingImageEvents.map((item) => item.eventCode).join(', ')}`,
       });
     }
 
@@ -426,13 +427,18 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
       };
     });
 
-    const frontHeaders = ['id', 'name', 'cck_id', ...eventDescriptors.map((event) => `@comp${event.eventCode}`)];
+    const frontHeaders = [
+      'id',
+      'name',
+      'cck_id',
+      ...eventDescriptors.map((event) => `@comp${eventImageByCode.get(event.eventCode)?.displayLabel || event.eventCode}`),
+    ];
     const backHeaders = [
       'id',
       'name',
       'cck_id',
-      ...eventDescriptors.map((event) => `comp${event.eventCode}`),
-      ...eventDescriptors.map((event) => `staff${event.eventCode}`),
+      ...eventDescriptors.map((event) => `comp${eventImageByCode.get(event.eventCode)?.displayLabel || event.eventCode}`),
+      ...eventDescriptors.map((event) => `staff${eventImageByCode.get(event.eventCode)?.displayLabel || event.eventCode}`),
     ];
 
     const allFrontRows = rowsWithClassification.map((item) => item.frontRow);
@@ -476,7 +482,7 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
         data: new TextEncoder().encode(file.content),
       })),
     );
-    const zipFileName = `${competitionName}-조편성-명찰.zip`;
+    const zipFileName = `${competitionName} 조편성 추출.zip`;
     const encodedZipFileName = encodeURIComponent(zipFileName);
 
     res.setHeader('Content-Type', 'application/zip');
