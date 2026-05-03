@@ -34,13 +34,14 @@
 | Get Competitions | `GET` | `/api/v1/competitions` | Query: `status=past|now|future` | 대회 목록 |
 | Get Competition Detail | `GET` | `/api/v1/competitions/:competitionId` | Path: `competitionId` | 대회 상세 + 라운드 목록 |
 | Get Rounds By Day | `GET` | `/api/v1/competitions/:competitionId/rounds/day/:dayCount` | Path: `competitionId`, `dayCount` | 일차별 라운드 |
-| Get Confirmed Registrations | `GET` | `/api/v1/competitions/:competitionId/registrations/confirmed` | Path: `competitionId` | 결제 완료 참가자 |
+| Get Confirmed Registrations | `GET` | `/api/v1/competitions/:competitionId/registrations/confirmed` | Path: `competitionId`, Query: `size`(optional) | 결제 완료 참가자 |
 
 ## Player
 | Name | Method | Path | Query/Path | 설명 |
 |---|---|---|---|---|
 | Get Player Assignments In Competition | `GET` | `/api/v1/competition/:compIdx/player/:cckId` | Path: `compIdx`, `cckId` | 대회 내 개인 배정 조회 |
 | Get Round Assignments | `GET` | `/api/v1/round/:roundIdx` | Path: `roundIdx` | 라운드별 역할 배정 조회 |
+| Get Round Groups | `GET` | `/api/v1/round/:roundIdx/groups` | Path: `roundIdx` | 라운드에 존재하는 그룹 목록 조회 |
 
 ## Admin - Round Config
 | Name | Method | Path | Body | 설명 |
@@ -59,6 +60,7 @@
 | Update Player Assignment (Alias plural) | `POST` | `/api/v1/admin/competitions/:compIdx/player-assignment` | 동일 | 위와 동일(별칭) |
 | Auto Assign | `POST` | `/api/v1/admin/competition/:compIdx/auto-assign` | 아래 샘플 참고 | 자동 배정 실행 |
 | Auto Assign (Alias plural) | `POST` | `/api/v1/admin/competitions/:compIdx/auto-assign` | 동일 | 위와 동일(별칭) |
+| Badge CSV Export | `POST` | `/api/v1/admin/competition/:compIdx/badge-export` | `{ "basePath": "...", "eventImages": [{ "eventCode":"33", "displayLabel":"3x3x3oh", "enablePath":"/enable/3x3x3", "disablePath":"/disable/3x3x3" }] }` | 명찰 앞/뒷면 CSV ZIP 다운로드 |
 | Reset All Assignments | `POST` | `/api/v1/admin/competition/:compIdx/reset-assignments` | `{ "confirmCompetitionName": "대회명" }` | 해당 대회의 모든 조편성/배정 초기화 |
 | Reset All Assignments (Alias plural) | `POST` | `/api/v1/admin/competitions/:compIdx/reset-assignments` | 동일 | 위와 동일(별칭) |
 
