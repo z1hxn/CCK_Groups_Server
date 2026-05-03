@@ -11,6 +11,7 @@ import { toConfirmedRegistration } from '../utils/mappers.js';
 
 export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
   const router = Router();
+  const DEFAULT_CONFIRMED_REGISTRATION_SIZE = 5000;
   const normalizeEventName = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '');
   const shuffle = (items) => {
     const arr = [...items];
@@ -112,7 +113,9 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
   };
 
   const getConfirmedRegistrations = async (compIdx) => {
-    const result = await proxyJson(`${config.paymentApiUrl}/registration/comp/${compIdx}/confirmed`);
+    const result = await proxyJson(
+      `${config.paymentApiUrl}/registration/comp/${compIdx}/confirmed?size=${DEFAULT_CONFIRMED_REGISTRATION_SIZE}`,
+    );
     if (!result.ok) {
       return {
         ok: false,

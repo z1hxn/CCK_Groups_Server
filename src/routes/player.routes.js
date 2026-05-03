@@ -12,6 +12,14 @@ import { toPlayerGroupRow, toPlayerRoundInfo } from '../utils/mappers.js';
 
 export const createPlayerRouter = ({ config, getDbPoolOrRespond }) => {
   const router = Router();
+  const normalizeGroupName = (value) => String(value || '').trim();
+  const mergeRoundGroupNames = ({ configuredGroups, assignmentRows }) => {
+    const configured = configuredGroups.map((item) => normalizeGroupName(item.groupName));
+    const assigned = assignmentRows.map((item) => normalizeGroupName(item.group_name));
+
+    return [...new Set([...configured, ...assigned].filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'ko-KR'));
+  };
 
   router.get('/api/v1/competition/:compIdx/player/:cckId', async (req, res) => {
     const db = getDbPoolOrRespond(res);
@@ -117,6 +125,35 @@ export const createPlayerRouter = ({ config, getDbPoolOrRespond }) => {
       round: toPlayerRoundInfo(effectiveRoundPayload),
       ...roleData,
       groups: toGroupAssignments(roleData),
+    });
+  });
+
+  router.get('/api/v1/round/:roundIdx/groups', async (req, res) => {
+    const db = getDbPoolOrRespond(res);
+    if (!db) return;
+
+    const roundIdx = Number(req.params.roundIdx);
+    if (!Number.isFinite(roundIdx)) {
+      return res.status(400).json({ message: 'Invalid roundIdx' });
+    }
+
+    const [assignmentRows] = await db.query(
+      `SELECT DISTINCT group_name
+       FROM \`${GROUP_ASSIGNMENT_TABLE_NAME}\`
+       WHERE round_idx = ?
+       ORDER BY group_name ASC`,
+      [roundIdx],
+    );
+    const configured = await getConfiguredRoundGroups(db, roundIdx);
+
+    const groups = mergeRoundGroupNames({
+      configuredGroups: configured,
+      assignmentRows: Array.isArray(assignmentRows) ? assignmentRows : [],
+    });
+
+    return res.json({
+      roundIdx,
+      groups,
     });
   });
 

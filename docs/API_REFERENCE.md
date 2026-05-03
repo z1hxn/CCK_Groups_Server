@@ -34,13 +34,14 @@
 | Get Competitions | `GET` | `/api/v1/competitions` | Query: `status=past|now|future` | 대회 목록 |
 | Get Competition Detail | `GET` | `/api/v1/competitions/:competitionId` | Path: `competitionId` | 대회 상세 + 라운드 목록 |
 | Get Rounds By Day | `GET` | `/api/v1/competitions/:competitionId/rounds/day/:dayCount` | Path: `competitionId`, `dayCount` | 일차별 라운드 |
-| Get Confirmed Registrations | `GET` | `/api/v1/competitions/:competitionId/registrations/confirmed` | Path: `competitionId` | 결제 완료 참가자 |
+| Get Confirmed Registrations | `GET` | `/api/v1/competitions/:competitionId/registrations/confirmed` | Path: `competitionId`, Query: `size`(optional) | 결제 완료 참가자 |
 
 ## Player
 | Name | Method | Path | Query/Path | 설명 |
 |---|---|---|---|---|
 | Get Player Assignments In Competition | `GET` | `/api/v1/competition/:compIdx/player/:cckId` | Path: `compIdx`, `cckId` | 대회 내 개인 배정 조회 |
 | Get Round Assignments | `GET` | `/api/v1/round/:roundIdx` | Path: `roundIdx` | 라운드별 역할 배정 조회 |
+| Get Round Groups | `GET` | `/api/v1/round/:roundIdx/groups` | Path: `roundIdx` | 라운드에 존재하는 그룹 목록 조회 |
 
 ## Admin - Round Config
 | Name | Method | Path | Body | 설명 |

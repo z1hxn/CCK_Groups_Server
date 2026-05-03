@@ -4,6 +4,7 @@ import { toCompetition, toConfirmedRegistration, toRound } from '../utils/mapper
 
 export const createCompetitionRouter = ({ config }) => {
   const router = Router();
+  const DEFAULT_CONFIRMED_REGISTRATION_SIZE = 5000;
 
   router.get(['/api/v1/competitions', '/api/competitions'], async (req, res) => {
     const status = String(req.query.status || 'now');
@@ -111,7 +112,12 @@ export const createCompetitionRouter = ({ config }) => {
       return res.status(400).json({ message: 'Invalid competition id' });
     }
 
-    const result = await proxyJson(`${config.paymentApiUrl}/registration/comp/${competitionId}/confirmed`);
+    const requestedSize = Number(req.query.size);
+    const size =
+      Number.isFinite(requestedSize) && requestedSize > 0
+        ? Math.floor(requestedSize)
+        : DEFAULT_CONFIRMED_REGISTRATION_SIZE;
+    const result = await proxyJson(`${config.paymentApiUrl}/registration/comp/${competitionId}/confirmed?size=${size}`);
     if (!result.ok) {
       return res.status(result.status).json({ message: 'Failed to fetch confirmed registrations', upstream: result.data });
     }

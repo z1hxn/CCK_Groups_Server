@@ -29,6 +29,15 @@
         "url": "{{baseUrl}}/round/{{roundIdx}}",
         "description": "GET /api/v1/round/:roundIdx"
       }
+    },
+    {
+      "name": "GetRoundGroups",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/round/{{roundIdx}}/groups",
+        "description": "GET /api/v1/round/:roundIdx/groups"
+      }
     }
   ]
 }
