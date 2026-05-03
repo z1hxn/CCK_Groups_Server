@@ -119,6 +119,15 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
     return `${base}/${relative}`;
   };
 
+  const toRoundColumnSuffix = (roundName) => {
+    const raw = String(roundName || '').trim();
+    if (!raw) return '';
+    if (/결승|final/i.test(raw)) return 'final';
+    const digitMatch = raw.match(/(\d+)/);
+    if (digitMatch) return `${digitMatch[1]}r`;
+    return raw.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9가-힣]/g, '');
+  };
+
   const sanitizeFileName = (value) =>
     String(value || '')
       .trim()
@@ -282,6 +291,7 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
     const roundIdxToEventCode = new Map();
     const eventDescriptors = [];
     const eventDescriptorByCode = new Map();
+    const roundDescriptors = [];
 
     for (const round of rounds) {
       const roundIdx = Number(round.idx);
@@ -289,6 +299,12 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
       const eventCode = toEventCode(round.cubeEventName);
       if (!eventCode) continue;
       roundIdxToEventCode.set(roundIdx, eventCode);
+      roundDescriptors.push({
+        roundIdx,
+        eventCode,
+        eventName: String(round.cubeEventName || '').trim(),
+        roundName: String(round.roundName || '').trim(),
+      });
       if (!eventDescriptorByCode.has(eventCode)) {
         const descriptor = {
           eventCode,
@@ -322,6 +338,31 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
     if (missingImageEvents.length > 0) {
       return res.status(400).json({
         message: `Missing event export config: ${missingImageEvents.map((item) => item.eventCode).join(', ')}`,
+      });
+    }
+
+    const roundColumnsRaw = Array.isArray(req.body?.roundColumns) ? req.body.roundColumns : [];
+    const roundColumnLabelByIdx = new Map();
+    for (const item of roundColumnsRaw) {
+      const roundIdx = Number(item?.roundIdx ?? item?.idx);
+      if (!Number.isFinite(roundIdx)) continue;
+      const displayLabel = String(item?.displayLabel ?? item?.label ?? '').trim();
+      if (!displayLabel) continue;
+      roundColumnLabelByIdx.set(roundIdx, displayLabel);
+    }
+    const roundColumnDescriptors = roundDescriptors.map((round) => {
+      const eventDisplayLabel = eventImageByCode.get(round.eventCode)?.displayLabel || round.eventCode;
+      const roundSuffix = toRoundColumnSuffix(round.roundName);
+      const defaultLabel = roundSuffix ? `${eventDisplayLabel}-${roundSuffix}` : eventDisplayLabel;
+      return {
+        ...round,
+        displayLabel: roundColumnLabelByIdx.get(round.roundIdx) || defaultLabel,
+      };
+    });
+    const missingRoundLabels = roundColumnDescriptors.filter((item) => !item.displayLabel);
+    if (missingRoundLabels.length > 0) {
+      return res.status(400).json({
+        message: `Missing round column labels: ${missingRoundLabels.map((item) => item.roundIdx).join(', ')}`,
       });
     }
 
@@ -360,40 +401,39 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
     const assignmentRowList = Array.isArray(assignmentRows?.[0]) ? assignmentRows[0] : [];
 
     const assignmentMap = new Map();
-    const ensureAssignmentEvent = (cckId, eventCode) => {
+    const ensureAssignmentRound = (cckId, roundIdx) => {
       if (!assignmentMap.has(cckId)) assignmentMap.set(cckId, new Map());
-      const eventMap = assignmentMap.get(cckId);
-      if (!eventMap.has(eventCode)) {
-        eventMap.set(eventCode, {
+      const roundMap = assignmentMap.get(cckId);
+      if (!roundMap.has(roundIdx)) {
+        roundMap.set(roundIdx, {
           competitor: new Set(),
           judge: new Set(),
           scrambler: new Set(),
           runner: new Set(),
         });
       }
-      return eventMap.get(eventCode);
+      return roundMap.get(roundIdx);
     };
 
     for (const row of assignmentRowList) {
       const roundIdx = Number(row?.round_idx);
-      const eventCode = roundIdxToEventCode.get(roundIdx);
-      if (!eventCode) continue;
+      if (!roundIdxToEventCode.has(roundIdx)) continue;
       const cckId = normalizeCckId(row?.cck_id);
       if (!cckId || !registrationMapByCckId.has(cckId)) continue;
       const groupName = String(row?.group_name || '').trim();
       if (!groupName) continue;
       const role = String(row?.role || '').trim().toLowerCase();
-      const eventAssignment = ensureAssignmentEvent(cckId, eventCode);
-      if (role === 'competitor') eventAssignment.competitor.add(groupName);
-      if (role === 'judge') eventAssignment.judge.add(groupName);
-      if (role === 'scrambler') eventAssignment.scrambler.add(groupName);
-      if (role === 'runner') eventAssignment.runner.add(groupName);
+      const roundAssignment = ensureAssignmentRound(cckId, roundIdx);
+      if (role === 'competitor') roundAssignment.competitor.add(groupName);
+      if (role === 'judge') roundAssignment.judge.add(groupName);
+      if (role === 'scrambler') roundAssignment.scrambler.add(groupName);
+      if (role === 'runner') roundAssignment.runner.add(groupName);
     }
 
     const sortGroups = (groups) => [...groups].sort((a, b) => a.localeCompare(b, 'ko-KR', { numeric: true }));
     const rowsWithClassification = registrations.map((registration) => {
       const selectedEvents = Array.isArray(registration.selectedEvents) ? registration.selectedEvents : [];
-      const byEvent = assignmentMap.get(registration.cckId) || new Map();
+      const byRound = assignmentMap.get(registration.cckId) || new Map();
 
       const frontCells = eventDescriptors.map((event) => {
         const isParticipating =
@@ -406,8 +446,8 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
 
       const compCells = [];
       const staffCells = [];
-      for (const event of eventDescriptors) {
-        const assignmentsByRole = byEvent.get(event.eventCode);
+      for (const round of roundColumnDescriptors) {
+        const assignmentsByRole = byRound.get(round.roundIdx);
         const compGroups = assignmentsByRole ? sortGroups(assignmentsByRole.competitor) : [];
         compCells.push(compGroups.join(','));
 
@@ -415,6 +455,10 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
         for (const role of ['judge', 'scrambler', 'runner']) {
           const groups = assignmentsByRole ? sortGroups(assignmentsByRole[role] || []) : [];
           if (groups.length === 0) continue;
+          if (groups.length === 1 && /^final$/i.test(groups[0])) {
+            staffParts.push(staffRoleLabel[role]);
+            continue;
+          }
           staffParts.push(`${staffRoleLabel[role]}(${groups.join(',')})`);
         }
         staffCells.push(staffParts.join(','));
@@ -437,8 +481,8 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
       'id',
       'name',
       'cck_id',
-      ...eventDescriptors.map((event) => `comp${eventImageByCode.get(event.eventCode)?.displayLabel || event.eventCode}`),
-      ...eventDescriptors.map((event) => `staff${eventImageByCode.get(event.eventCode)?.displayLabel || event.eventCode}`),
+      ...roundColumnDescriptors.map((round) => `comp${round.displayLabel}`),
+      ...roundColumnDescriptors.map((round) => `staff${round.displayLabel}`),
     ];
 
     const allFrontRows = rowsWithClassification.map((item) => item.frontRow);

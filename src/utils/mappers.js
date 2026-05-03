@@ -19,8 +19,8 @@ export const toRound = (dto) => ({
   advance: dto.advance ?? null,
 });
 
-export const toConfirmedRegistration = (dto) => ({
-  id: dto.id,
+export const toConfirmedRegistration = (dto, index = 0) => ({
+  id: index + 1,
   competitionId: dto.competitionId,
   competitionName: dto.competitionName,
   name: dto.name,
