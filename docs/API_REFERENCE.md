@@ -60,6 +60,7 @@
 | Update Player Assignment (Alias plural) | `POST` | `/api/v1/admin/competitions/:compIdx/player-assignment` | 동일 | 위와 동일(별칭) |
 | Auto Assign | `POST` | `/api/v1/admin/competition/:compIdx/auto-assign` | 아래 샘플 참고 | 자동 배정 실행 |
 | Auto Assign (Alias plural) | `POST` | `/api/v1/admin/competitions/:compIdx/auto-assign` | 동일 | 위와 동일(별칭) |
+| Badge CSV Export | `POST` | `/api/v1/admin/competition/:compIdx/badge-export` | `{ "basePath": "...", "eventImages": [{ "eventCode":"33", "enablePath":"/enable/3x3x3", "disablePath":"/disable/3x3x3" }] }` | 명찰 앞/뒷면 CSV ZIP 다운로드 |
 | Reset All Assignments | `POST` | `/api/v1/admin/competition/:compIdx/reset-assignments` | `{ "confirmCompetitionName": "대회명" }` | 해당 대회의 모든 조편성/배정 초기화 |
 | Reset All Assignments (Alias plural) | `POST` | `/api/v1/admin/competitions/:compIdx/reset-assignments` | 동일 | 위와 동일(별칭) |
 

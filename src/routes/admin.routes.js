@@ -8,11 +8,121 @@ import { normalizeCckId } from '../utils/cckId.js';
 import { getConfiguredRoundGroups, validateRoundBelongsToCompetition } from '../utils/roundGroups.js';
 import { extractListPayload, extractObjectPayload, proxyJson } from '../utils/http.js';
 import { toConfirmedRegistration } from '../utils/mappers.js';
+import { createStoredZip } from '../utils/zip.js';
 
 export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
   const router = Router();
   const DEFAULT_CONFIRMED_REGISTRATION_SIZE = 5000;
   const normalizeEventName = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+  const csvBom = '\uFEFF';
+  const staffRoleLabel = {
+    judge: 'J',
+    scrambler: 'S',
+    runner: 'R',
+  };
+  const eventCodeAliases = new Map([
+    ['2x2x2', '22'],
+    ['22', '22'],
+    ['222', '22'],
+    ['3x3x3', '33'],
+    ['33', '33'],
+    ['333', '33'],
+    ['4x4x4', '44'],
+    ['44', '44'],
+    ['444', '44'],
+    ['5x5x5', '55'],
+    ['55', '55'],
+    ['555', '55'],
+    ['6x6x6', '66'],
+    ['66', '66'],
+    ['666', '66'],
+    ['7x7x7', '77'],
+    ['77', '77'],
+    ['777', '77'],
+    ['onehanded', 'oh'],
+    ['3x3x3onehanded', 'oh'],
+    ['oh', 'oh'],
+    ['clock', 'clock'],
+    ['rubiksclock', 'clock'],
+    ['pyraminx', 'pyra'],
+    ['pyra', 'pyra'],
+    ['skewb', 'skewb'],
+    ['megaminx', 'mega'],
+    ['mega', 'mega'],
+    ['square1', 'sq1'],
+    ['sq1', 'sq1'],
+    ['fewestmoves', 'fm'],
+    ['fmc', 'fm'],
+    ['3x3x3fewestmoves', 'fm'],
+    ['blindfolded', 'bf'],
+    ['3x3x3blindfolded', '3bf'],
+    ['3bf', '3bf'],
+    ['4x4x4blindfolded', '4bf'],
+    ['4bf', '4bf'],
+    ['5x5x5blindfolded', '5bf'],
+    ['5bf', '5bf'],
+    ['multiblind', 'mbf'],
+    ['3x3x3multiblind', 'mbf'],
+    ['mbf', 'mbf'],
+  ]);
+
+  const toEventCode = (value) => {
+    const normalized = normalizeEventName(value)
+      .replace(/큐브|cube|rubik|rubikscube|puzzle|event/gi, '')
+      .replace(/[()\-_/]/g, '')
+      .trim();
+    if (!normalized) return '';
+    const alias = eventCodeAliases.get(normalized);
+    if (alias) return alias;
+    const repeatedCubeMatch = normalized.match(/^([2-7])x\1x\1$/);
+    if (repeatedCubeMatch) return `${repeatedCubeMatch[1]}${repeatedCubeMatch[1]}`;
+    const tripledDigitMatch = normalized.match(/^([2-7])\1\1$/);
+    if (tripledDigitMatch) return `${tripledDigitMatch[1]}${tripledDigitMatch[1]}`;
+    const doubledDigitMatch = normalized.match(/^([2-7])\1$/);
+    if (doubledDigitMatch) return `${doubledDigitMatch[1]}${doubledDigitMatch[1]}`;
+    return normalized.replace(/[^a-z0-9]/g, '');
+  };
+
+  const matchEvent = (leftEventName, rightEventName) => {
+    const leftNormalized = normalizeEventName(leftEventName);
+    const rightNormalized = normalizeEventName(rightEventName);
+    if (!leftNormalized || !rightNormalized) return false;
+    if (leftNormalized === rightNormalized) return true;
+    const leftCode = toEventCode(leftNormalized);
+    const rightCode = toEventCode(rightNormalized);
+    return Boolean(leftCode && rightCode && leftCode === rightCode);
+  };
+
+  const escapeCsv = (value) => {
+    const text = String(value ?? '');
+    if (/[",\r\n]/.test(text)) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+  };
+
+  const buildCsv = ({ headers, rows }) => {
+    const lines = [];
+    lines.push(headers.map((item) => escapeCsv(item)).join(','));
+    for (const row of rows) {
+      lines.push(row.map((item) => escapeCsv(item)).join(','));
+    }
+    return `${csvBom}${lines.join('\r\n')}\r\n`;
+  };
+
+  const mergePath = (basePath, relativePath) => {
+    const base = String(basePath || '').trim().replace(/\/+$/, '');
+    const relative = String(relativePath || '').trim().replace(/^\/+/, '');
+    if (!base && !relative) return '';
+    if (!base) return `/${relative}`;
+    if (!relative) return base;
+    return `${base}/${relative}`;
+  };
+
+  const sanitizeFileName = (value) =>
+    String(value || '')
+      .trim()
+      .replace(/[\\/:*?"<>|]/g, '_');
   const shuffle = (items) => {
     const arr = [...items];
     for (let i = arr.length - 1; i > 0; i -= 1) {
@@ -149,6 +259,229 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
       }),
     );
     return map;
+  };
+
+  const handleBadgeCsvExport = async (req, res) => {
+    const db = getDbPoolOrRespond(res);
+    if (!db) return;
+
+    const compIdx = Number(req.params.compIdx);
+    if (!Number.isFinite(compIdx)) return res.status(400).json({ message: 'Invalid compIdx' });
+
+    const basePath = String(req.body?.basePath || '').trim();
+    if (!basePath) {
+      return res.status(400).json({ message: 'basePath is required' });
+    }
+
+    const roundsResult = await getCompetitionRoundIdxs(compIdx);
+    if (!roundsResult.ok) {
+      return res.status(roundsResult.status).json({ message: roundsResult.message, upstream: roundsResult.upstream });
+    }
+
+    const rounds = Array.isArray(roundsResult.rounds) ? roundsResult.rounds : [];
+    const roundIdxToEventCode = new Map();
+    const eventDescriptors = [];
+    const eventDescriptorByCode = new Map();
+
+    for (const round of rounds) {
+      const roundIdx = Number(round.idx);
+      if (!Number.isFinite(roundIdx)) continue;
+      const eventCode = toEventCode(round.cubeEventName);
+      if (!eventCode) continue;
+      roundIdxToEventCode.set(roundIdx, eventCode);
+      if (!eventDescriptorByCode.has(eventCode)) {
+        const descriptor = {
+          eventCode,
+          eventName: String(round.cubeEventName || '').trim(),
+        };
+        eventDescriptorByCode.set(eventCode, descriptor);
+        eventDescriptors.push(descriptor);
+      }
+    }
+
+    if (eventDescriptors.length === 0) {
+      return res.status(400).json({ message: 'No events available for badge export' });
+    }
+
+    const eventImagesRaw = Array.isArray(req.body?.eventImages) ? req.body.eventImages : [];
+    const eventImageByCode = new Map();
+    for (const item of eventImagesRaw) {
+      const eventCode = toEventCode(item?.eventCode ?? item?.code ?? item?.eventName);
+      if (!eventCode) continue;
+      eventImageByCode.set(eventCode, {
+        enablePath: String(item?.enablePath ?? item?.enabledPath ?? '').trim(),
+        disablePath: String(item?.disablePath ?? item?.disabledPath ?? '').trim(),
+      });
+    }
+
+    const missingImageEvents = eventDescriptors.filter((event) => {
+      const configItem = eventImageByCode.get(event.eventCode);
+      return !configItem?.enablePath || !configItem?.disablePath;
+    });
+    if (missingImageEvents.length > 0) {
+      return res.status(400).json({
+        message: `Missing event image paths: ${missingImageEvents.map((item) => item.eventCode).join(', ')}`,
+      });
+    }
+
+    const registrationsResult = await getConfirmedRegistrations(compIdx);
+    if (!registrationsResult.ok) {
+      return res.status(registrationsResult.status).json({
+        message: registrationsResult.message,
+        upstream: registrationsResult.upstream,
+      });
+    }
+
+    const registrationMapByCckId = new Map();
+    for (const registration of registrationsResult.registrations) {
+      const cckId = normalizeCckId(registration.cckId);
+      if (!cckId) continue;
+      if (registrationMapByCckId.has(cckId)) continue;
+      registrationMapByCckId.set(cckId, {
+        ...registration,
+        cckId,
+      });
+    }
+    const registrations = [...registrationMapByCckId.values()];
+    const registrationCckIds = registrations.map((item) => item.cckId);
+    const isAdminByCckId = await getAdminFlagMap(registrationCckIds);
+
+    const roundIdxs = [...roundIdxToEventCode.keys()];
+    const assignmentRows = roundIdxs.length > 0
+      ? await db.query(
+        `SELECT round_idx, cck_id, group_name, role
+         FROM \`${GROUP_ASSIGNMENT_TABLE_NAME}\`
+         WHERE round_idx IN (?)
+         ORDER BY idx ASC`,
+        [roundIdxs],
+      )
+      : [[]];
+    const assignmentRowList = Array.isArray(assignmentRows?.[0]) ? assignmentRows[0] : [];
+
+    const assignmentMap = new Map();
+    const ensureAssignmentEvent = (cckId, eventCode) => {
+      if (!assignmentMap.has(cckId)) assignmentMap.set(cckId, new Map());
+      const eventMap = assignmentMap.get(cckId);
+      if (!eventMap.has(eventCode)) {
+        eventMap.set(eventCode, {
+          competitor: new Set(),
+          judge: new Set(),
+          scrambler: new Set(),
+          runner: new Set(),
+        });
+      }
+      return eventMap.get(eventCode);
+    };
+
+    for (const row of assignmentRowList) {
+      const roundIdx = Number(row?.round_idx);
+      const eventCode = roundIdxToEventCode.get(roundIdx);
+      if (!eventCode) continue;
+      const cckId = normalizeCckId(row?.cck_id);
+      if (!cckId || !registrationMapByCckId.has(cckId)) continue;
+      const groupName = String(row?.group_name || '').trim();
+      if (!groupName) continue;
+      const role = String(row?.role || '').trim().toLowerCase();
+      const eventAssignment = ensureAssignmentEvent(cckId, eventCode);
+      if (role === 'competitor') eventAssignment.competitor.add(groupName);
+      if (role === 'judge') eventAssignment.judge.add(groupName);
+      if (role === 'scrambler') eventAssignment.scrambler.add(groupName);
+      if (role === 'runner') eventAssignment.runner.add(groupName);
+    }
+
+    const sortGroups = (groups) => [...groups].sort((a, b) => a.localeCompare(b, 'ko-KR', { numeric: true }));
+    const rowsWithClassification = registrations.map((registration) => {
+      const selectedEvents = Array.isArray(registration.selectedEvents) ? registration.selectedEvents : [];
+      const byEvent = assignmentMap.get(registration.cckId) || new Map();
+
+      const frontCells = eventDescriptors.map((event) => {
+        const isParticipating =
+          selectedEvents.length === 0 ||
+          selectedEvents.some((selectedEventName) => matchEvent(selectedEventName, event.eventName));
+        const imageConfig = eventImageByCode.get(event.eventCode);
+        const relativePath = isParticipating ? imageConfig?.enablePath : imageConfig?.disablePath;
+        return mergePath(basePath, relativePath);
+      });
+
+      const compCells = [];
+      const staffCells = [];
+      for (const event of eventDescriptors) {
+        const assignmentsByRole = byEvent.get(event.eventCode);
+        const compGroups = assignmentsByRole ? sortGroups(assignmentsByRole.competitor) : [];
+        compCells.push(compGroups.join(','));
+
+        const staffParts = [];
+        for (const role of ['judge', 'scrambler', 'runner']) {
+          const groups = assignmentsByRole ? sortGroups(assignmentsByRole[role] || []) : [];
+          if (groups.length === 0) continue;
+          staffParts.push(`${staffRoleLabel[role]}(${groups.join(',')})`);
+        }
+        staffCells.push(staffParts.join(','));
+      }
+
+      return {
+        isOrganizer: isAdminByCckId.get(registration.cckId) === true,
+        frontRow: [registration.id, registration.name, registration.cckId, ...frontCells],
+        backRow: [registration.id, registration.name, registration.cckId, ...compCells, ...staffCells],
+      };
+    });
+
+    const frontHeaders = ['id', 'name', 'cck_id', ...eventDescriptors.map((event) => `@comp${event.eventCode}`)];
+    const backHeaders = [
+      'id',
+      'name',
+      'cck_id',
+      ...eventDescriptors.map((event) => `comp${event.eventCode}`),
+      ...eventDescriptors.map((event) => `staff${event.eventCode}`),
+    ];
+
+    const allFrontRows = rowsWithClassification.map((item) => item.frontRow);
+    const allBackRows = rowsWithClassification.map((item) => item.backRow);
+    const regularFrontRows = rowsWithClassification.filter((item) => !item.isOrganizer).map((item) => item.frontRow);
+    const regularBackRows = rowsWithClassification.filter((item) => !item.isOrganizer).map((item) => item.backRow);
+    const organizerFrontRows = rowsWithClassification.filter((item) => item.isOrganizer).map((item) => item.frontRow);
+    const organizerBackRows = rowsWithClassification.filter((item) => item.isOrganizer).map((item) => item.backRow);
+
+    const competitionName = sanitizeFileName(roundsResult.competitionName || `competition-${compIdx}`);
+    const files = [
+      {
+        name: `${competitionName}-조편성-명찰앞면-전체.csv`,
+        content: buildCsv({ headers: frontHeaders, rows: allFrontRows }),
+      },
+      {
+        name: `${competitionName}-조편성-명찰앞면-일반참가자.csv`,
+        content: buildCsv({ headers: frontHeaders, rows: regularFrontRows }),
+      },
+      {
+        name: `${competitionName}-조편성-명찰앞면-조직위원.csv`,
+        content: buildCsv({ headers: frontHeaders, rows: organizerFrontRows }),
+      },
+      {
+        name: `${competitionName}-조편성-명찰뒷면-전체.csv`,
+        content: buildCsv({ headers: backHeaders, rows: allBackRows }),
+      },
+      {
+        name: `${competitionName}-조편성-명찰뒷면-일반참가자.csv`,
+        content: buildCsv({ headers: backHeaders, rows: regularBackRows }),
+      },
+      {
+        name: `${competitionName}-조편성-명찰뒷면-조직위원.csv`,
+        content: buildCsv({ headers: backHeaders, rows: organizerBackRows }),
+      },
+    ];
+
+    const zipData = createStoredZip(
+      files.map((file) => ({
+        name: file.name,
+        data: new TextEncoder().encode(file.content),
+      })),
+    );
+    const zipFileName = `${competitionName}-조편성-명찰.zip`;
+    const encodedZipFileName = encodeURIComponent(zipFileName);
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedZipFileName}`);
+    return res.status(200).send(Buffer.from(zipData));
   };
 
   const handleRoundGroupConfigUpdate = async (req, res) => {
@@ -817,6 +1150,15 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
       '/api/admin/competitions/:compIdx/reset-assignments',
     ],
     handleResetCompetitionAssignments,
+  );
+  router.post(
+    [
+      '/api/v1/admin/competition/:compIdx/badge-export',
+      '/api/v1/admin/competitions/:compIdx/badge-export',
+      '/api/admin/competition/:compIdx/badge-export',
+      '/api/admin/competitions/:compIdx/badge-export',
+    ],
+    handleBadgeCsvExport,
   );
 
   return router;
