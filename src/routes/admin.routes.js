@@ -785,14 +785,14 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
     }
   };
 
-  router.get(['/competition/:compIdx/round/:roundIdx/config', '/competition/:compIdx/round/:roundIdx/configs'], sendRoundConfig);
+  router.get(['/admin/competition/:compIdx/round/:roundIdx/config'], sendRoundConfig);
 
-  router.put(['/competition/:compIdx/round/:roundIdx/config', '/competition/:compIdx/round/:roundIdx/configs'], handleRoundGroupConfigUpdate);
-  router.post(['/competition/:compIdx/round/:roundIdx/config', '/competition/:compIdx/round/:roundIdx/configs'], handleRoundGroupConfigUpdate);
+  router.put(['/admin/competition/:compIdx/round/:roundIdx/config'], handleRoundGroupConfigUpdate);
+  router.post(['/admin/competition/:compIdx/round/:roundIdx/config'], handleRoundGroupConfigUpdate);
 
-  router.post('/competition/:compIdx/player-assignment', handlePlayerAssignmentUpdate);
-  router.post('/competition/:compIdx/auto-assign', handleAutoAssign);
-  router.post('/competition/:compIdx/reset-assignments', handleResetCompetitionAssignments);
+  router.post('/admin/competition/:compIdx/player-assignment', handlePlayerAssignmentUpdate);
+  router.post('/admin/competition/:compIdx/auto-assign', handleAutoAssign);
+  router.post('/admin/competition/:compIdx/reset-assignments', handleResetCompetitionAssignments);
 
   return router;
 };
