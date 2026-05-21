@@ -112,7 +112,7 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
   };
 
   const getConfirmedRegistrations = async (compIdx) => {
-    const result = await proxyJson(`${config.paymentApiUrl}/registration/comp/${compIdx}/confirmed`);
+    const result = await proxyJson(`${config.paymentApiUrl}/registration/comp/${compIdx}/confirmed?size=80`);
     if (!result.ok) {
       return {
         ok: false,
@@ -152,6 +152,11 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
     const db = getDbPoolOrRespond(res);
     if (!db) return;
 
+
+
+
+
+    
     const compIdx = Number(req.params.compIdx);
     const roundIdx = Number(req.params.roundIdx);
     if (!Number.isFinite(compIdx)) return res.status(400).json({ message: 'Invalid compIdx' });
@@ -780,41 +785,14 @@ export const createAdminRouter = ({ config, getDbPoolOrRespond }) => {
     }
   };
 
-  router.get(['/api/v1/admin/competition/:compIdx/round/:roundIdx/config', '/api/admin/competition/:compIdx/round/:roundIdx/config'], sendRoundConfig);
-  router.get(['/api/v1/admin/competition/:compIdx/round/:roundIdx/configs', '/api/admin/competition/:compIdx/round/:roundIdx/configs'], sendRoundConfig);
+  router.get(['/admin/competition/:compIdx/round/:roundIdx/config'], sendRoundConfig);
 
-  router.put(['/api/v1/admin/competition/:compIdx/round/:roundIdx/config', '/api/admin/competition/:compIdx/round/:roundIdx/config'], handleRoundGroupConfigUpdate);
-  router.post(['/api/v1/admin/competition/:compIdx/round/:roundIdx/config', '/api/admin/competition/:compIdx/round/:roundIdx/config'], handleRoundGroupConfigUpdate);
-  router.put(['/api/v1/admin/competition/:compIdx/round/:roundIdx/configs', '/api/admin/competition/:compIdx/round/:roundIdx/configs'], handleRoundGroupConfigUpdate);
-  router.post(['/api/v1/admin/competition/:compIdx/round/:roundIdx/configs', '/api/admin/competition/:compIdx/round/:roundIdx/configs'], handleRoundGroupConfigUpdate);
+  router.put(['/admin/competition/:compIdx/round/:roundIdx/config'], handleRoundGroupConfigUpdate);
+  router.post(['/admin/competition/:compIdx/round/:roundIdx/config'], handleRoundGroupConfigUpdate);
 
-  router.post(
-    [
-      '/api/v1/admin/competition/:compIdx/player-assignment',
-      '/api/v1/admin/competitions/:compIdx/player-assignment',
-      '/api/admin/competition/:compIdx/player-assignment',
-      '/api/admin/competitions/:compIdx/player-assignment',
-    ],
-    handlePlayerAssignmentUpdate,
-  );
-  router.post(
-    [
-      '/api/v1/admin/competition/:compIdx/auto-assign',
-      '/api/v1/admin/competitions/:compIdx/auto-assign',
-      '/api/admin/competition/:compIdx/auto-assign',
-      '/api/admin/competitions/:compIdx/auto-assign',
-    ],
-    handleAutoAssign,
-  );
-  router.post(
-    [
-      '/api/v1/admin/competition/:compIdx/reset-assignments',
-      '/api/v1/admin/competitions/:compIdx/reset-assignments',
-      '/api/admin/competition/:compIdx/reset-assignments',
-      '/api/admin/competitions/:compIdx/reset-assignments',
-    ],
-    handleResetCompetitionAssignments,
-  );
+  router.post('/admin/competition/:compIdx/player-assignment', handlePlayerAssignmentUpdate);
+  router.post('/admin/competition/:compIdx/auto-assign', handleAutoAssign);
+  router.post('/admin/competition/:compIdx/reset-assignments', handleResetCompetitionAssignments);
 
   return router;
 };

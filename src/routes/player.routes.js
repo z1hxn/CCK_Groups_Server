@@ -13,7 +13,7 @@ import { toPlayerGroupRow, toPlayerRoundInfo } from '../utils/mappers.js';
 export const createPlayerRouter = ({ config, getDbPoolOrRespond }) => {
   const router = Router();
 
-  router.get('/api/v1/competition/:compIdx/player/:cckId', async (req, res) => {
+  router.get('/competition/:compIdx/player/:cckId', async (req, res) => {
     const db = getDbPoolOrRespond(res);
     if (!db) return;
 
@@ -73,7 +73,7 @@ export const createPlayerRouter = ({ config, getDbPoolOrRespond }) => {
     });
   });
 
-  router.get('/api/v1/round/:roundIdx', async (req, res) => {
+  router.get('/round/:roundIdx', async (req, res) => {
     const db = getDbPoolOrRespond(res);
     if (!db) return;
 

@@ -5,7 +5,7 @@ import { normalizeCckId } from '../utils/cckId.js';
 export const createAuthRouter = ({ config }) => {
   const router = Router();
 
-  router.post(['/api/v1/auth/token', '/api/auth/token'], async (req, res) => {
+  router.post('/auth/token', async (req, res) => {
     const code = String(req.query.code || '');
     if (!code) return res.status(400).json({ message: 'Missing code' });
 
@@ -18,7 +18,7 @@ export const createAuthRouter = ({ config }) => {
     return res.status(result.status).json(result.data ?? {});
   });
 
-  router.post(['/api/v1/auth/refresh', '/api/auth/refresh'], async (req, res) => {
+  router.post('/auth/refresh', async (req, res) => {
     const result = await proxyAuthJson(req, `${config.rankingApiUrl}/auth/refresh`, {
       method: 'POST',
       headers: {
@@ -32,7 +32,7 @@ export const createAuthRouter = ({ config }) => {
     return res.status(result.status).json(result.data ?? {});
   });
 
-  router.post(['/api/v1/auth/logout', '/api/auth/logout'], async (req, res) => {
+  router.post('/auth/logout', async (req, res) => {
     const authHeader = req.headers.authorization;
     const result = await proxyAuthJson(req, `${config.rankingApiUrl}/auth/logout`, {
       method: 'POST',
@@ -48,7 +48,7 @@ export const createAuthRouter = ({ config }) => {
     return res.status(result.status).json(result.data ?? {});
   });
 
-  router.get(['/api/v1/auth/info/:cckId', '/api/auth/info/:cckId'], async (req, res) => {
+  router.get('/auth/info/:cckId', async (req, res) => {
     const cckId = normalizeCckId(req.params.cckId);
     if (!cckId) return res.status(400).json({ message: 'Invalid cckId' });
 
@@ -56,7 +56,7 @@ export const createAuthRouter = ({ config }) => {
     return res.status(result.status).json(result.data ?? {});
   });
 
-  router.get(['/api/v1/auth/info', '/api/auth/info'], async (req, res) => {
+  router.get('/auth/info', async (req, res) => {
     const authHeader = req.headers.authorization;
     const result = await proxyAuthJson(req, `${config.rankingApiUrl}/auth/info`, {
       headers: {
